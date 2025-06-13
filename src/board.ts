@@ -235,6 +235,17 @@ export function generateKanbanBoard(
 	return rows.join("\n");
 }
 
+export function generateMilestoneBoard(
+	tasks: Task[],
+	milestones: string[] = [],
+	layout: BoardLayout = "horizontal",
+	maxColumnWidth = 20,
+	format: BoardFormat = "terminal",
+): string {
+	const milestoneTasks = tasks.map((t) => ({ ...t, status: t.milestone || "" }));
+	return generateKanbanBoard(milestoneTasks, milestones, layout, maxColumnWidth, format);
+}
+
 export async function exportKanbanBoardToFile(
 	tasks: Task[],
 	statuses: string[],

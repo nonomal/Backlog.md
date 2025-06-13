@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportKanbanBoardToFile, generateKanbanBoard } from "../board.ts";
+import { exportKanbanBoardToFile, generateKanbanBoard, generateMilestoneBoard } from "../board.ts";
 import type { Task } from "../types/index.ts";
 
 describe("generateKanbanBoard", () => {
@@ -257,6 +257,39 @@ describe("generateKanbanBoard", () => {
 		expect(board).toContain("First");
 		expect(board).toContain("task-2");
 		expect(board).toContain("Second");
+	});
+
+	it("groups tasks by milestone", () => {
+		const tasks: Task[] = [
+			{
+				id: "task-1",
+				title: "First",
+				status: "To Do",
+				milestone: "M1",
+				assignee: [],
+				createdDate: "",
+				labels: [],
+				dependencies: [],
+				description: "",
+			},
+			{
+				id: "task-2",
+				title: "Second",
+				status: "In Progress",
+				milestone: "M2",
+				assignee: [],
+				createdDate: "",
+				labels: [],
+				dependencies: [],
+				description: "",
+			},
+		];
+
+		const board = generateMilestoneBoard(tasks, ["M1", "M2"]);
+		expect(board).toContain("M1");
+		expect(board).toContain("M2");
+		expect(board).toContain("task-1");
+		expect(board).toContain("task-2");
 	});
 });
 
