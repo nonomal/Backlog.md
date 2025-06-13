@@ -22,6 +22,9 @@ Add a backlog board view --milestones or -m to view the board based on milestone
 ## Implementation Notes
 
 - Added `-m, --milestones` flag to `backlog board view` in `src/cli.ts`.
-- Tasks are mapped to their `milestone` field when this flag is used.
-- Introduced `generateMilestoneBoard` helper in `src/board.ts` and tests for milestone grouping.
-- Updated README with usage example.
+- When enabled the command maps each task's `milestone` to its `status` and then
+  calls `renderBoardTui()` so the interactive blessed board works the same for
+  milestones as it does for statuses.
+- Introduced a small `generateMilestoneBoard` helper in `src/board.ts` (used in
+  tests and export logic) that reuses `generateKanbanBoard()`.
+- Updated `readme.md` with a usage example for the new option.
