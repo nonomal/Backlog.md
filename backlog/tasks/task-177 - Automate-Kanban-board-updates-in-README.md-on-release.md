@@ -5,7 +5,7 @@ status: To Do
 assignee: []
 created_date: '2025-07-12'
 labels: []
-dependencies: []
+dependencies: [task-173]
 priority: medium
 ---
 
