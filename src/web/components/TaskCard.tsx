@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task } from '../types/task';
+import { type Task } from '../../types';
 
 interface TaskCardProps {
   task: Task;
@@ -7,7 +7,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdate, onEdit }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onEdit }) => {
   const [isDragging, setIsDragging] = React.useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -49,9 +49,9 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onUpdate, onEdit }) => {
         <span className="text-xs text-gray-500">{task.id}</span>
       </div>
       
-      {task.description && (
+      {task.body && (
         <p className="text-sm text-gray-600 mb-3 line-clamp-3">
-          {task.description}
+          {task.body}
         </p>
       )}
       

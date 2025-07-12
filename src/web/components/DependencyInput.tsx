@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Task } from '../types/task';
+import React, { useState, useRef, useEffect, type KeyboardEvent } from 'react';
+import { type Task } from '../../types';
 
 interface DependencyInputProps {
   value: string[];
@@ -69,7 +69,7 @@ const DependencyInput: React.FC<DependencyInputProps> = ({ value, onChange, avai
       setSelectedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
     } else if ((e.key === 'Enter' || e.key === ',') && inputValue.trim()) {
       e.preventDefault();
-      if (suggestions.length > 0) {
+      if (suggestions.length > 0 && suggestions[selectedIndex]) {
         addDependency(suggestions[selectedIndex].id);
       }
     } else if (e.key === 'Backspace' && !inputValue && value.length > 0) {
@@ -86,7 +86,7 @@ const DependencyInput: React.FC<DependencyInputProps> = ({ value, onChange, avai
     // Check if user typed a comma
     if (newValue.endsWith(',')) {
       const searchValue = newValue.slice(0, -1).trim();
-      if (searchValue && suggestions.length > 0) {
+      if (searchValue && suggestions.length > 0 && suggestions[selectedIndex]) {
         addDependency(suggestions[selectedIndex].id);
       }
     } else {

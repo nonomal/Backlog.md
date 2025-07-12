@@ -102,7 +102,7 @@ async function createTaskViaCore(
 						.split(",")
 						.map((dep) => (dep.trim().startsWith("task-") ? dep.trim() : `task-${dep.trim()}`))
 				: [],
-			description: options.description || "",
+			body: options.body || "",
 			...(options.parent && {
 				parentTaskId: options.parent.startsWith("task-") ? options.parent : `task-${options.parent}`,
 			}),
@@ -116,13 +116,13 @@ async function createTaskViaCore(
 				.split(",")
 				.map((item) => item.trim())
 				.filter(Boolean);
-			task.description = updateTaskAcceptanceCriteria(task.description, criteria);
+			task.body = updateTaskAcceptanceCriteria(task.body, criteria);
 		}
 
 		// Handle implementation plan
 		if (options.plan) {
 			const { updateTaskImplementationPlan } = await import("../markdown/serializer.ts");
-			task.description = updateTaskImplementationPlan(task.description, options.plan);
+			task.body = updateTaskImplementationPlan(task.body, options.plan);
 		}
 
 		// Validate dependencies exist
@@ -175,7 +175,7 @@ function createTaskViaCLI(
 	// Build CLI arguments
 	const args = ["bun", CLI_PATH, "task", "create", options.title];
 
-	if (options.description) args.push("--description", options.description);
+	if (options.body) args.push("--description", options.body);
 	if (options.assignee) args.push("--assignee", options.assignee);
 	if (options.status) args.push("--status", options.status);
 	if (options.labels) args.push("--labels", options.labels);
@@ -251,7 +251,7 @@ async function editTaskViaCore(
 		const updatedTask = {
 			...existingTask,
 			...(options.title && { title: options.title }),
-			...(options.description && { description: options.description }),
+			...(options.body && { body: options.body }),
 			...(options.status && { status: options.status }),
 			...(options.assignee && { assignee: [options.assignee] }),
 			...(options.labels && {
@@ -272,13 +272,13 @@ async function editTaskViaCore(
 		// Update implementation notes if provided
 		if (options.notes) {
 			const { updateTaskImplementationNotes } = await import("../markdown/serializer.ts");
-			updatedTask.description = updateTaskImplementationNotes(updatedTask.description, options.notes);
+			updatedTask.body = updateTaskImplementationNotes(updatedTask.body, options.notes);
 		}
 
 		// Update implementation plan if provided
 		if (options.plan) {
 			const { updateTaskImplementationPlan } = await import("../markdown/serializer.ts");
-			updatedTask.description = updateTaskImplementationPlan(updatedTask.description, options.plan);
+			updatedTask.body = updateTaskImplementationPlan(updatedTask.body, options.plan);
 		}
 
 		// Save updated task
@@ -305,7 +305,7 @@ function editTaskViaCLI(
 	const args = ["bun", CLI_PATH, "task", "edit", options.taskId];
 
 	if (options.title) args.push("--title", options.title);
-	if (options.description) args.push("--description", options.description);
+	if (options.body) args.push("--description", options.body);
 	if (options.assignee) args.push("--assignee", options.assignee);
 	if (options.status) args.push("--status", options.status);
 	if (options.labels) args.push("--labels", options.labels);
@@ -378,8 +378,8 @@ async function viewTaskViaCore(
 			if (task.dependencies?.length > 0) {
 				output += `\nDependencies: ${task.dependencies.join(", ")}`;
 			}
-			if (task.description) {
-				output += `\n\n${task.description}`;
+			if (task.body) {
+				output += `\n\n${task.body}`;
 			}
 		}
 
