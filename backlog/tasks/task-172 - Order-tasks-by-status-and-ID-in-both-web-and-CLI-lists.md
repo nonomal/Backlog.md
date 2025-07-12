@@ -26,6 +26,7 @@ This will provide consistent ordering across both interfaces and make it easier 
 
 ### CLI Task List
 - [ ] `bun run cli task list` orders tasks by status ascending, then ID descending
+- [ ] `bun run cli task list --plain` also follows the same ordering
 - [ ] Output clearly shows the ordering (status groups visible)
 - [ ] Maintains current CLI output format and information
 - [ ] Works with existing filtering options if any
