@@ -1070,7 +1070,7 @@ draftCmd
 	.action(async (taskId: string) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
-		const success = await core.archiveDraft(taskId, true);
+		const success = await core.archiveDraft(taskId);
 		if (success) {
 			console.log(`Archived draft ${taskId}`);
 		} else {
@@ -1364,7 +1364,7 @@ docCmd
 			createdDate: new Date().toISOString().split("T")[0] || new Date().toISOString().slice(0, 10),
 			body: "",
 		};
-		await core.createDocument(document, true, options.path || "");
+		await core.createDocument(document, undefined, options.path || "");
 		console.log(`Created document ${id}`);
 	});
 
@@ -1445,7 +1445,7 @@ decisionCmd
 			decision: "",
 			consequences: "",
 		};
-		await core.createDecision(decision, true);
+		await core.createDecision(decision);
 		console.log(`Created decision ${id}`);
 	});
 
