@@ -72,7 +72,7 @@ Short, imperative explanation of the goal of the task and why it is needed.
 - [ ] Error response matches REST
 - [ ] P95 latency ≤ 50 ms under 100 RPS
 
-## Implementation Plan (the how)
+## Implementation Plan (the how) (added after starting work on a task)
 
 1. Research existing GraphQL resolver patterns
 2. Implement basic resolver with error handling
@@ -80,7 +80,7 @@ Short, imperative explanation of the goal of the task and why it is needed.
 4. Write unit and integration tests
 5. Benchmark performance under load
 
-## Implementation Notes (only added after working on the task)
+## Implementation Notes (only added after finishing work on a task)
 
 - Approach taken
 - Features implemented or modified
@@ -93,7 +93,7 @@ Short, imperative explanation of the goal of the task and why it is needed.
 Mandatory sections for every task:
 
 - **Implementation Plan**: (The **"how"**) Outline the steps to achieve the task. Because the implementation details may
-  change after the task is created, **the implementation notes must be added only after putting the task in progress**
+  change after the task is created, **the implementation plan must be added only after putting the task in progress**
   and before starting working on the task.
 - **Implementation Notes**: Document your approach, decisions, challenges, and any deviations from the plan. This
   section is added after you are done working on the task. It should summarize what you did and why you did it. Keep it
