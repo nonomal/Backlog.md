@@ -633,6 +633,9 @@ export class FileSystem {
 				case "auto_commit":
 					config.autoCommit = value.toLowerCase() === "true";
 					break;
+				case "zero_padded_ids":
+					config.zeroPaddedIds = Number.parseInt(value, 10);
+					break;
 			}
 		}
 
@@ -652,6 +655,7 @@ export class FileSystem {
 			defaultPort: config.defaultPort,
 			remoteOperations: config.remoteOperations,
 			autoCommit: config.autoCommit,
+			zeroPaddedIds: config.zeroPaddedIds,
 		};
 	}
 
@@ -672,6 +676,7 @@ export class FileSystem {
 			...(config.defaultPort ? [`default_port: ${config.defaultPort}`] : []),
 			...(typeof config.remoteOperations === "boolean" ? [`remote_operations: ${config.remoteOperations}`] : []),
 			...(typeof config.autoCommit === "boolean" ? [`auto_commit: ${config.autoCommit}`] : []),
+			...(typeof config.zeroPaddedIds === "number" ? [`zero_padded_ids: ${config.zeroPaddedIds}`] : []),
 		];
 
 		return `${lines.join("\n")}\n`;

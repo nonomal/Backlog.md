@@ -121,21 +121,70 @@ program
 				}
 			}
 
-			// Configuration prompts with intelligent defaults
-			const configPrompts = await prompts([
+			// Configuration prompts with intelligent defaults - step by step to ensure proper order
+			const basicPrompts = await prompts(
+				[
+					{
+						type: "confirm",
+						name: "autoCommit",
+						message: "Enable automatic git commits for task operations?",
+						hint: "When enabled, task changes are automatically committed to git",
+						initial: existingConfig?.autoCommit ?? false,
+					},
+					{
+						type: "confirm",
+						name: "remoteOperations",
+						message: "Enable remote git operations? (needed to fetch tasks from remote branches)",
+						hint: "Required for accessing tasks from feature branches and remote repos",
+						initial: existingConfig?.remoteOperations ?? true,
+					},
+					{
+						type: "confirm",
+						name: "enableZeroPadding",
+						message: "Enable zero-padded IDs for consistent formatting? (3 -> task-001, task-023)",
+						hint: "Example: task-001, doc-001 instead of task-1, doc-1",
+						initial: (existingConfig?.zeroPaddedIds ?? 0) > 0,
+					},
+				],
 				{
-					type: "confirm",
-					name: "autoCommit",
-					message: "Enable automatic git commits for task operations?",
-					hint: "When enabled, task changes are automatically committed to git",
-					initial: existingConfig?.autoCommit ?? false,
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
 				},
-				{
-					type: "confirm",
-					name: "remoteOperations",
-					message: "Enable remote git operations? (needed to fetch tasks from remote branches)",
-					initial: existingConfig?.remoteOperations ?? true,
-				},
+			);
+
+			// Zero-padding configuration (conditional) - ask immediately after enable question
+			let zeroPaddedIds: number | undefined;
+			if (basicPrompts.enableZeroPadding) {
+				const paddingPrompt = await prompts(
+					{
+						type: "number",
+						name: "paddingWidth",
+						message: "Number of digits for zero-padding:",
+						hint: "e.g., 3 creates task-001, task-002; 4 creates task-0001, task-0002",
+						initial: existingConfig?.zeroPaddedIds || 3,
+						min: 1,
+						max: 10,
+					},
+					{
+						onCancel: () => {
+							console.log("Aborting initialization.");
+							process.exit(1);
+						},
+					},
+				);
+
+				if (paddingPrompt?.paddingWidth) {
+					zeroPaddedIds = paddingPrompt.paddingWidth;
+				}
+			} else {
+				// User chose not to enable padding
+				zeroPaddedIds = 0;
+			}
+
+			// Web UI configuration prompt
+			const webUIPrompt = await prompts(
 				{
 					type: "confirm",
 					name: "configureWebUI",
@@ -143,21 +192,71 @@ program
 					hint: "Optional: Set custom port and browser behavior",
 					initial: false,
 				},
-			]);
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 
-			if (configPrompts === undefined) {
-				console.log("Aborting initialization.");
-				process.exit(1);
+			// Web UI configuration (conditional) - ask immediately after enable question
+			let webUIConfig: { defaultPort?: number; autoOpenBrowser?: boolean } = {};
+			if (webUIPrompt.configureWebUI) {
+				const webUIPrompts = await prompts(
+					[
+						{
+							type: "number",
+							name: "defaultPort",
+							message: "Default web UI port:",
+							hint: "Port number for the web interface (1-65535)",
+							initial: existingConfig?.defaultPort ?? 6420,
+							min: 1,
+							max: 65535,
+						},
+						{
+							type: "confirm",
+							name: "autoOpenBrowser",
+							message: "Automatically open browser when starting web UI?",
+							hint: "When enabled, 'backlog web' automatically opens your browser",
+							initial: existingConfig?.autoOpenBrowser ?? true,
+						},
+					],
+					{
+						onCancel: () => {
+							console.log("Aborting initialization.");
+							process.exit(1);
+						},
+					},
+				);
+
+				if (webUIPrompts !== undefined) {
+					webUIConfig = webUIPrompts;
+				}
 			}
 
+			// Combine all configuration responses
+			const configPrompts = {
+				...basicPrompts,
+				configureWebUI: webUIPrompt.configureWebUI,
+			};
+
 			// Default editor configuration - always prompt during init
-			const editorPrompt = await prompts({
-				type: "text",
-				name: "editor",
-				message: "Default editor command (optional):",
-				hint: "e.g., 'code --wait', 'vim', 'nano'",
-				initial: existingConfig?.defaultEditor || process.env.EDITOR || process.env.VISUAL || "",
-			});
+			const editorPrompt = await prompts(
+				{
+					type: "text",
+					name: "editor",
+					message: "Default editor command (optional):",
+					hint: "e.g., 'code --wait', 'vim', 'nano'",
+					initial: existingConfig?.defaultEditor || process.env.EDITOR || process.env.VISUAL || "",
+				},
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 
 			let defaultEditor: string | undefined;
 			if (editorPrompt?.editor) {
@@ -168,40 +267,23 @@ program
 				} else {
 					console.warn(`Warning: Editor command '${editorPrompt.editor}' not found in PATH`);
 					// Still allow them to set it even if not found
-					const confirmAnyway = await prompts({
-						type: "confirm",
-						name: "confirm",
-						message: "Editor not found in PATH. Set it anyway?",
-						initial: false,
-					});
+					const confirmAnyway = await prompts(
+						{
+							type: "confirm",
+							name: "confirm",
+							message: "Editor not found in PATH. Set it anyway?",
+							initial: false,
+						},
+						{
+							onCancel: () => {
+								console.log("Aborting initialization.");
+								process.exit(1);
+							},
+						},
+					);
 					if (confirmAnyway?.confirm) {
 						defaultEditor = editorPrompt.editor;
 					}
-				}
-			}
-
-			// Web UI configuration (optional)
-			let webUIConfig: { defaultPort?: number; autoOpenBrowser?: boolean } = {};
-			if (configPrompts.configureWebUI) {
-				const webUIPrompts = await prompts([
-					{
-						type: "number",
-						name: "defaultPort",
-						message: "Default web UI port:",
-						initial: existingConfig?.defaultPort ?? 6420,
-						min: 1,
-						max: 65535,
-					},
-					{
-						type: "confirm",
-						name: "autoOpenBrowser",
-						message: "Automatically open browser when starting web UI?",
-						initial: existingConfig?.autoOpenBrowser ?? true,
-					},
-				]);
-
-				if (webUIPrompts !== undefined) {
-					webUIConfig = webUIPrompts;
 				}
 			}
 
@@ -214,17 +296,25 @@ program
 				".github/copilot-instructions.md",
 			] as const;
 
-			const { files: selected } = await prompts({
-				type: "multiselect",
-				name: "files",
-				message: "Select agent instruction files to update",
-				choices: agentOptions.map((name) => ({
-					title: name === ".github/copilot-instructions.md" ? "Copilot" : name,
-					value: name,
-				})),
-				hint: "Space to select, Enter to confirm",
-				instructions: false,
-			});
+			const { files: selected } = await prompts(
+				{
+					type: "multiselect",
+					name: "files",
+					message: "Select agent instruction files to update",
+					choices: agentOptions.map((name) => ({
+						title: name === ".github/copilot-instructions.md" ? "Copilot" : name,
+						value: name,
+					})),
+					hint: "Space to select, Enter to confirm",
+					instructions: false,
+				},
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 			const files: AgentInstructionFile[] = (selected ?? []) as AgentInstructionFile[];
 
 			// Prepare configuration object preserving existing values
@@ -253,6 +343,8 @@ program
 						: existingConfig?.autoOpenBrowser !== undefined
 							? existingConfig.autoOpenBrowser
 							: true,
+				// Zero-padding config: only include if enabled (> 0)
+				...(zeroPaddedIds && zeroPaddedIds > 0 && { zeroPaddedIds }),
 			};
 
 			// Show configuration summary
@@ -263,6 +355,11 @@ program
 			if (config.defaultEditor) console.log(`  Default Editor: ${config.defaultEditor}`);
 			if (config.defaultPort) console.log(`  Web UI Port: ${config.defaultPort}`);
 			if (config.autoOpenBrowser !== undefined) console.log(`  Auto Open Browser: ${config.autoOpenBrowser}`);
+			if (config.zeroPaddedIds) {
+				console.log(`  Zero-Padded IDs: ${config.zeroPaddedIds} digits`);
+			} else {
+				console.log("  Zero-Padded IDs: disabled");
+			}
 			console.log(`  Statuses: [${config.statuses.join(", ")}]`);
 			console.log("");
 
@@ -288,12 +385,12 @@ program
 	});
 
 export async function generateNextDocId(core: Core): Promise<string> {
+	const config = await core.filesystem.loadConfig();
 	// Load local documents
 	const docs = await core.filesystem.listDocuments();
 	const allIds: string[] = [];
 
 	try {
-		const config = await core.filesystem.loadConfig();
 		const backlogDir = config?.backlogDirectory || "backlog";
 
 		// Skip remote operations if disabled
@@ -344,16 +441,24 @@ export async function generateNextDocId(core: Core): Promise<string> {
 		}
 	}
 
-	return `doc-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `doc-${paddedId}`;
+	}
+
+	return `doc-${nextIdNumber}`;
 }
 
 export async function generateNextDecisionId(core: Core): Promise<string> {
+	const config = await core.filesystem.loadConfig();
 	// Load local decisions
 	const decisions = await core.filesystem.listDecisions();
 	const allIds: string[] = [];
 
 	try {
-		const config = await core.filesystem.loadConfig();
 		const backlogDir = config?.backlogDirectory || "backlog";
 
 		// Skip remote operations if disabled
@@ -404,17 +509,25 @@ export async function generateNextDecisionId(core: Core): Promise<string> {
 		}
 	}
 
-	return `decision-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `decision-${paddedId}`;
+	}
+
+	return `decision-${nextIdNumber}`;
 }
 
 async function generateNextId(core: Core, parent?: string): Promise<string> {
+	const config = await core.filesystem.loadConfig();
 	// Load local tasks and drafts in parallel
 	const [tasks, drafts] = await Promise.all([core.filesystem.listTasks(), core.filesystem.listDrafts()]);
 	const all = [...tasks, ...drafts];
 	const allIds: string[] = [];
 
 	try {
-		const config = await core.filesystem.loadConfig();
 		const backlogDir = config?.backlogDirectory || "backlog";
 
 		// Skip remote operations if disabled
@@ -467,7 +580,17 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 				if (num > max) max = num;
 			}
 		}
-		return `${prefix}.${max + 1}`;
+		const nextSubIdNumber = max + 1;
+		const padding = config?.zeroPaddedIds;
+
+		if (padding && typeof padding === "number" && padding > 0) {
+			// Pad sub-tasks to 2 digits. This supports up to 99 sub-tasks,
+			// which is a reasonable limit and keeps IDs from getting too long.
+			const paddedSubId = String(nextSubIdNumber).padStart(2, "0");
+			return `${prefix}.${paddedSubId}`;
+		}
+
+		return `${prefix}.${nextSubIdNumber}`;
 	}
 
 	let max = 0;
@@ -485,7 +608,15 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 			if (num > max) max = num;
 		}
 	}
-	return `task-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `task-${paddedId}`;
+	}
+
+	return `task-${nextIdNumber}`;
 }
 
 function normalizeDependencies(dependencies: unknown): string[] {
@@ -1574,10 +1705,13 @@ configCmd
 				case "autoCommit":
 					console.log(config.autoCommit?.toString() || "");
 					break;
+				case "zeroPaddedIds":
+					console.log(config.zeroPaddedIds?.toString() || "(disabled)");
+					break;
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, backlogDirectory, defaultPort, autoOpenBrowser, remoteOperations, autoCommit",
+						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, backlogDirectory, defaultPort, autoOpenBrowser, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1681,6 +1815,16 @@ configCmd
 					}
 					break;
 				}
+				case "zeroPaddedIds": {
+					const padding = Number.parseInt(value, 10);
+					if (Number.isNaN(padding) || padding < 0) {
+						console.error("zeroPaddedIds must be a non-negative number.");
+						process.exit(1);
+					}
+					// Set to undefined if 0 to remove it from config
+					config.zeroPaddedIds = padding > 0 ? padding : undefined;
+					break;
+				}
 				case "statuses":
 				case "labels":
 				case "milestones":
@@ -1691,7 +1835,7 @@ configCmd
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, backlogDirectory, autoOpenBrowser, defaultPort, remoteOperations",
+						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, backlogDirectory, autoOpenBrowser, defaultPort, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1732,6 +1876,7 @@ configCmd
 			console.log(`  defaultPort: ${config.defaultPort ?? "(not set)"}`);
 			console.log(`  remoteOperations: ${config.remoteOperations ?? "(not set)"}`);
 			console.log(`  autoCommit: ${config.autoCommit ?? "(not set)"}`);
+			console.log(`  zeroPaddedIds: ${config.zeroPaddedIds ?? "(disabled)"}`);
 		} catch (err) {
 			console.error("Failed to list config values", err);
 			process.exitCode = 1;
