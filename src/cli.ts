@@ -5,6 +5,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
 import prompts from "prompts";
+import { DEFAULT_DIRECTORIES } from "./constants/index.ts";
 import { filterTasksByLatestState, getLatestTaskStatesForIds } from "./core/cross-branch-tasks.ts";
 import { loadRemoteTasks, resolveTaskConflict, type TaskWithMetadata } from "./core/remote-tasks.ts";
 import {
@@ -326,7 +327,6 @@ program
 				defaultStatus: existingConfig?.defaultStatus || "To Do",
 				dateFormat: existingConfig?.dateFormat || "yyyy-mm-dd",
 				maxColumnWidth: existingConfig?.maxColumnWidth || 20,
-				backlogDirectory: existingConfig?.backlogDirectory || "backlog",
 				autoCommit: configPrompts.autoCommit,
 				remoteOperations: configPrompts.remoteOperations,
 				...(defaultEditor && { defaultEditor }),
@@ -391,7 +391,7 @@ export async function generateNextDocId(core: Core): Promise<string> {
 	const allIds: string[] = [];
 
 	try {
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -459,7 +459,7 @@ export async function generateNextDecisionId(core: Core): Promise<string> {
 	const allIds: string[] = [];
 
 	try {
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -521,14 +521,25 @@ export async function generateNextDecisionId(core: Core): Promise<string> {
 }
 
 async function generateNextId(core: Core, parent?: string): Promise<string> {
+	// Ensure git operations have access to the config
+	await core.ensureConfigLoaded();
+
 	const config = await core.filesystem.loadConfig();
 	// Load local tasks and drafts in parallel
 	const [tasks, drafts] = await Promise.all([core.filesystem.listTasks(), core.filesystem.listDrafts()]);
-	const all = [...tasks, ...drafts];
+
 	const allIds: string[] = [];
 
+	// Add local task and draft IDs first
+	for (const t of tasks) {
+		allIds.push(t.id);
+	}
+	for (const d of drafts) {
+		allIds.push(d.id);
+	}
+
 	try {
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -541,15 +552,36 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 
 		const branches = await core.gitOps.listAllBranches();
 
-		// Load files from all branches in parallel
-		const branchFilePromises = branches.map(async (branch) => {
-			const files = await core.gitOps.listFilesInTree(branch, `${backlogDir}/tasks`);
-			return files
-				.map((file) => {
-					const match = file.match(/task-([\d.]+)/);
-					return match ? `task-${match[1]}` : null;
-				})
-				.filter((id): id is string => id !== null);
+		// Filter and normalize branch names - handle both local and remote branches
+		const normalizedBranches = branches
+			.flatMap((branch) => {
+				// For remote branches like "origin/feature", extract just "feature"
+				// But also try the full remote ref in case it's needed
+				if (branch.startsWith("origin/")) {
+					return [branch, branch.replace("origin/", "")];
+				}
+				return [branch];
+			})
+			// Remove duplicates and filter out HEAD
+			.filter((branch, index, arr) => arr.indexOf(branch) === index && branch !== "HEAD" && !branch.includes("HEAD"));
+
+		// Load files from all branches in parallel with better error handling
+		const branchFilePromises = normalizedBranches.map(async (branch) => {
+			try {
+				const files = await core.gitOps.listFilesInTree(branch, `${backlogDir}/tasks`);
+				return files
+					.map((file) => {
+						const match = file.match(/task-(\d+)/);
+						return match ? `task-${match[1]}` : null;
+					})
+					.filter((id): id is string => id !== null);
+			} catch (error) {
+				// Silently ignore errors for individual branches (they might not exist or be accessible)
+				if (process.env.DEBUG) {
+					console.log(`Could not access branch ${branch}:`, error);
+				}
+				return [];
+			}
 		});
 
 		const branchResults = await Promise.all(branchFilePromises);
@@ -566,13 +598,7 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 	if (parent) {
 		const prefix = parent.startsWith("task-") ? parent : `task-${parent}`;
 		let max = 0;
-		for (const t of tasks) {
-			if (t.id.startsWith(`${prefix}.`)) {
-				const rest = t.id.slice(prefix.length + 1);
-				const num = Number.parseInt(rest.split(".")[0] || "0", 10);
-				if (num > max) max = num;
-			}
-		}
+		// Iterate over allIds (which now includes both local and remote)
 		for (const id of allIds) {
 			if (id.startsWith(`${prefix}.`)) {
 				const rest = id.slice(prefix.length + 1);
@@ -594,13 +620,7 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 	}
 
 	let max = 0;
-	for (const t of all) {
-		const match = t.id.match(/^task-(\d+)/);
-		if (match) {
-			const num = Number.parseInt(match[1] || "0", 10);
-			if (num > max) max = num;
-		}
-	}
+	// Iterate over allIds (which now includes both local and remote)
 	for (const id of allIds) {
 		const match = id.match(/^task-(\d+)/);
 		if (match) {
@@ -738,6 +758,7 @@ taskCmd
 	.action(async (title: string, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
 		const id = await generateNextId(core, options.parent);
 		const task = buildTaskFromOptions(id, title, options);
 
@@ -1128,7 +1149,7 @@ taskCmd
 taskCmd
 	.argument("[taskId]")
 	.option("--plain", "use plain text output")
-	.action(async (taskId: string | undefined, options: any) => {
+	.action(async (taskId: string | undefined, options: { plain?: boolean }) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
 
@@ -1188,6 +1209,7 @@ draftCmd
 	.action(async (title: string, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
 		const id = await generateNextId(core);
 		const task = buildTaskFromOptions(id, title, options);
 		const filepath = await core.createDraft(task);
@@ -1690,9 +1712,6 @@ configCmd
 				case "maxColumnWidth":
 					console.log(config.maxColumnWidth?.toString() || "");
 					break;
-				case "backlogDirectory":
-					console.log(config.backlogDirectory || "");
-					break;
 				case "defaultPort":
 					console.log(config.defaultPort?.toString() || "");
 					break;
@@ -1711,7 +1730,7 @@ configCmd
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, backlogDirectory, defaultPort, autoOpenBrowser, remoteOperations, autoCommit, zeroPaddedIds",
+						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1767,9 +1786,6 @@ configCmd
 					config.maxColumnWidth = width;
 					break;
 				}
-				case "backlogDirectory":
-					config.backlogDirectory = value;
-					break;
 				case "autoOpenBrowser": {
 					const boolValue = value.toLowerCase();
 					if (boolValue === "true" || boolValue === "1" || boolValue === "yes") {
@@ -1835,7 +1851,7 @@ configCmd
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, backlogDirectory, autoOpenBrowser, defaultPort, remoteOperations, autoCommit, zeroPaddedIds",
+						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, autoOpenBrowser, defaultPort, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1871,7 +1887,6 @@ configCmd
 			console.log(`  milestones: [${config.milestones.join(", ")}]`);
 			console.log(`  dateFormat: ${config.dateFormat}`);
 			console.log(`  maxColumnWidth: ${config.maxColumnWidth || "(not set)"}`);
-			console.log(`  backlogDirectory: ${config.backlogDirectory || "(not set)"}`);
 			console.log(`  autoOpenBrowser: ${config.autoOpenBrowser ?? "(not set)"}`);
 			console.log(`  defaultPort: ${config.defaultPort ?? "(not set)"}`);
 			console.log(`  remoteOperations: ${config.remoteOperations ?? "(not set)"}`);
