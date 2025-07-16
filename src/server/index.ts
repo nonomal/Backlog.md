@@ -84,6 +84,12 @@ export class BacklogServer {
 						GET: async (req) => await this.handleGetDecision(req.params.id),
 						PUT: async (req) => await this.handleUpdateDecision(req, req.params.id),
 					},
+					"/api/drafts": {
+						GET: async () => await this.handleListDrafts(),
+					},
+					"/api/drafts/:id/promote": {
+						POST: async (req) => await this.handlePromoteDraft(req.params.id),
+					},
 				},
 				fetch: async (req, server) => {
 					// Apply CORS headers to all responses
@@ -314,7 +320,12 @@ export class BacklogServer {
 			...(taskData.priority && { priority: taskData.priority }),
 		};
 
-		await this.core.createTask(task, await this.shouldAutoCommit());
+		// Check if this should be a draft based on status
+		if (task.status && task.status.toLowerCase() === "draft") {
+			await this.core.createDraft(task, await this.shouldAutoCommit());
+		} else {
+			await this.core.createTask(task, await this.shouldAutoCommit());
+		}
 		return Response.json(task, { status: 201 });
 	}
 
@@ -640,5 +651,29 @@ export class BacklogServer {
 	private handleError(error: Error): Response {
 		console.error("Server Error:", error);
 		return new Response("Internal Server Error", { status: 500 });
+	}
+
+	// Draft handlers
+	private async handleListDrafts(): Promise<Response> {
+		try {
+			const drafts = await this.core.filesystem.listDrafts();
+			return Response.json(drafts);
+		} catch (error) {
+			console.error("Error listing drafts:", error);
+			return Response.json([]);
+		}
+	}
+
+	private async handlePromoteDraft(draftId: string): Promise<Response> {
+		try {
+			const success = await this.core.promoteDraft(draftId);
+			if (!success) {
+				return Response.json({ error: "Draft not found" }, { status: 404 });
+			}
+			return Response.json({ success: true });
+		} catch (error) {
+			console.error("Error promoting draft:", error);
+			return Response.json({ error: "Failed to promote draft" }, { status: 500 });
+		}
 	}
 }

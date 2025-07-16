@@ -858,7 +858,8 @@ taskCmd
 			filtered = filtered.filter((t) => t.priority?.toLowerCase() === priorityLower);
 		}
 
-		// Apply sorting if specified
+		// Apply sorting - default to priority sorting
+		let sortedTasks = filtered;
 		if (options.sort) {
 			const validSortFields = ["priority", "id"];
 			const sortField = options.sort.toLowerCase();
@@ -867,8 +868,12 @@ taskCmd
 				process.exitCode = 1;
 				return;
 			}
-			filtered = sortTasks(filtered, sortField);
+			sortedTasks = sortTasks(filtered, sortField);
+		} else {
+			// Default to priority sorting
+			sortedTasks = sortTasks(filtered, "priority");
 		}
+		filtered = sortedTasks;
 
 		if (filtered.length === 0) {
 			if (options.parent) {
@@ -884,6 +889,18 @@ taskCmd
 		// Workaround for bun compile issue with commander options
 		const isPlainFlag = options.plain || process.argv.includes("--plain");
 		if (isPlainFlag) {
+			// If sorting by priority, do global sorting instead of status-grouped sorting
+			if (options.sort && options.sort.toLowerCase() === "priority") {
+				const sortedTasks = sortTasks(filtered, "priority");
+				console.log("Tasks (sorted by priority):");
+				for (const t of sortedTasks) {
+					const priorityIndicator = t.priority ? `[${t.priority.toUpperCase()}] ` : "";
+					const statusIndicator = t.status ? ` (${t.status})` : "";
+					console.log(`  ${priorityIndicator}${t.id} - ${t.title}${statusIndicator}`);
+				}
+				return;
+			}
+
 			const groups = new Map<string, Task[]>();
 			for (const task of filtered) {
 				const status = task.status || "";
@@ -901,8 +918,15 @@ taskCmd
 			for (const status of ordered) {
 				const list = groups.get(status);
 				if (!list) continue;
+
+				// Sort tasks within each status group if a sort field was specified
+				let sortedList = list;
+				if (options.sort) {
+					sortedList = sortTasks(list, options.sort.toLowerCase());
+				}
+
 				console.log(`${status || "No Status"}:`);
-				for (const t of list) {
+				for (const t of sortedList) {
 					const priorityIndicator = t.priority ? `[${t.priority.toUpperCase()}] ` : "";
 					console.log(`  ${priorityIndicator}${t.id} - ${t.title}`);
 				}
@@ -1198,6 +1222,66 @@ taskCmd
 	});
 
 const draftCmd = program.command("draft");
+
+draftCmd
+	.command("list")
+	.description("list all drafts")
+	.option("--sort <field>", "sort drafts by field (priority, id)")
+	.option("--plain", "use plain text output")
+	.action(async (options: { plain?: boolean; sort?: string }) => {
+		const cwd = process.cwd();
+		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
+		const drafts = await core.filesystem.listDrafts();
+
+		if (!drafts || drafts.length === 0) {
+			console.log("No drafts found.");
+			return;
+		}
+
+		// Apply sorting - default to priority sorting like the web UI
+		const { sortTasks } = await import("./utils/task-sorting.ts");
+		let sortedDrafts = drafts;
+
+		if (options.sort) {
+			const validSortFields = ["priority", "id"];
+			const sortField = options.sort.toLowerCase();
+			if (!validSortFields.includes(sortField)) {
+				console.error(`Invalid sort field: ${options.sort}. Valid values are: priority, id`);
+				process.exitCode = 1;
+				return;
+			}
+			sortedDrafts = sortTasks(drafts, sortField);
+		} else {
+			// Default to priority sorting to match web UI behavior
+			sortedDrafts = sortTasks(drafts, "priority");
+		}
+
+		if (options.plain || process.argv.includes("--plain")) {
+			// Plain text output for AI agents
+			console.log("Drafts:");
+			for (const draft of sortedDrafts) {
+				const priorityIndicator = draft.priority ? `[${draft.priority.toUpperCase()}] ` : "";
+				console.log(`  ${priorityIndicator}${draft.id} - ${draft.title}`);
+			}
+		} else {
+			// Interactive UI - use unified view with draft support
+			const firstDraft = sortedDrafts[0];
+			if (!firstDraft) return;
+
+			const { runUnifiedView } = await import("./ui/unified-view.ts");
+			await runUnifiedView({
+				core,
+				initialView: "task-list",
+				selectedTask: firstDraft,
+				tasks: sortedDrafts,
+				filter: {
+					description: "All Drafts",
+				},
+				title: "Drafts",
+			});
+		}
+	});
 
 draftCmd
 	.command("create <title>")
