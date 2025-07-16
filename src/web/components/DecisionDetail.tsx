@@ -6,6 +6,7 @@ import { type Decision } from '../../types';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { SuccessToast } from './SuccessToast';
 import { useTheme } from '../contexts/ThemeContext';
+import { sanitizeUrlTitle } from '../utils/urlHelpers';
 
 // Utility function for ID transformations
 const stripIdPrefix = (id: string): string => {
@@ -36,22 +37,24 @@ const MarkdownEditor = memo(function MarkdownEditor({
 
 	// Edit mode - show full editor that fills the available space
 	return (
-		<div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 w-full flex flex-col" style={{ minHeight: '500px', height: '70vh' }}>
-			<MDEditor
-				value={value}
-				onChange={onChange}
-				preview="edit"
-				height="100%"
-				hideToolbar={false}
-				data-color-mode={theme}
-				textareaProps={{
-					placeholder: 'Write your decision documentation here...',
-					style: { 
-						fontSize: '14px',
-						resize: 'none'
-					}
-				}}
-			/>
+		<div className="h-full w-full flex flex-col">
+			<div className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+				<MDEditor
+					value={value}
+					onChange={onChange}
+					preview="edit"
+					height="100%"
+					hideToolbar={false}
+					data-color-mode={theme}
+					textareaProps={{
+						placeholder: 'Write your decision documentation here...',
+						style: { 
+							fontSize: '14px',
+							resize: 'none'
+						}
+					}}
+				/>
+			</div>
 		</div>
 	);
 });
@@ -93,7 +96,7 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 			setOriginalDecisionTitle('');
 			setContent('');
 			setOriginalContent('');
-		} else if (id && decisions.length > 0) {
+		} else if (id) {
 			setIsNewDecision(false);
 			setIsEditing(false); // Ensure we start in preview mode for existing decisions
 			loadDecisionContent();
@@ -120,9 +123,10 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 			// Find decision from props
 			const prefixedId = addDecisionPrefix(id);
 			const decision = decisions.find(d => d.id === prefixedId);
-			if (decision) {
-				setDecision(decision);
-				// Fetch full decision data
+			
+			// Always try to fetch the decision from API, whether we found it in decisions or not
+			// This ensures deep linking works even before the parent component loads the decisions array
+			try {
 				const fullDecision = await apiClient.fetchDecision(prefixedId);
 				setContent(fullDecision.body || '');
 				setOriginalContent(fullDecision.body || '');
@@ -130,6 +134,16 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 				setOriginalDecisionTitle(fullDecision.title || '');
 				// Update decision state with full data
 				setDecision(fullDecision);
+			} catch (fetchError) {
+				// If fetch fails and we don't have the decision in props, show error
+				if (!decision) {
+					console.error('Failed to load decision:', fetchError);
+				} else {
+					// We have basic info from props even if fetch failed
+					setDecision(decision);
+					setDecisionTitle(decision.title || '');
+					setOriginalDecisionTitle(decision.title || '');
+				}
 			}
 		} catch (error) {
 			console.error('Failed to load decision:', error);
@@ -159,7 +173,7 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 				setIsEditing(false);
 				setIsNewDecision(false);
 				const newId = stripIdPrefix(decision.id);
-				navigate(`/decisions/${newId}/${encodeURIComponent(decisionTitle)}`);
+				navigate(`/decisions/${newId}/${sanitizeUrlTitle(decisionTitle)}`);
 			} else {
 				// Update existing decision
 				if (!id) return;
@@ -171,7 +185,7 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 				setTimeout(() => setShowSaveSuccess(false), 4000);
 				// Exit edit mode and navigate to decision detail page (this will load in preview mode)
 				setIsEditing(false);
-				navigate(`/decisions/${id}/${encodeURIComponent(decisionTitle)}`);
+				navigate(`/decisions/${id}/${sanitizeUrlTitle(decisionTitle)}`);
 			}
 		} catch (error) {
 			console.error('Failed to save decision:', error);
@@ -329,8 +343,8 @@ export default function DecisionDetail({ decisions, onRefreshData }: DecisionDet
 			</div>
 
 			{/* Content Section */}
-			<div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-800 transition-colors duration-200">
-				<div className="py-8 px-8">
+			<div className="flex-1 bg-gray-50 dark:bg-gray-800 transition-colors duration-200 flex flex-col">
+				<div className="flex-1 p-8 flex flex-col min-h-0">
 					<MarkdownEditor
 						value={content}
 						onChange={(val) => setContent(val || '')}
