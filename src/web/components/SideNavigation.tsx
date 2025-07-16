@@ -5,6 +5,7 @@ import Fuse from 'fuse.js';
 import { type Task, type Document, type Decision } from '../../types';
 import ErrorBoundary from './ErrorBoundary';
 import { SidebarSkeleton } from './LoadingSpinner';
+import { sanitizeUrlTitle } from '../utils/urlHelpers';
 
 // Utility functions for ID transformations
 const stripIdPrefix = (id: string): string => {
@@ -372,8 +373,8 @@ const SideNavigation = memo(function SideNavigation({
 						{searchResults.unified.map((result, index) => {
 							const item = result.item;
 							const getResultLink = () => {
-								if (item.type === 'doc') return `/documentation/${stripIdPrefix(item.id)}/${encodeURIComponent(item.title)}`;
-								if (item.type === 'decision') return `/decisions/${stripIdPrefix(item.id)}/${encodeURIComponent(item.title)}`;
+								if (item.type === 'doc') return `/documentation/${stripIdPrefix(item.id)}/${sanitizeUrlTitle(item.title)}`;
+								if (item.type === 'decision') return `/decisions/${stripIdPrefix(item.id)}/${sanitizeUrlTitle(item.title)}`;
 								if (item.type === 'task') return `/?highlight=${encodeURIComponent(item.id)}`; // Tasks are shown on the board page with highlight
 								return '/';
 							};
@@ -421,7 +422,7 @@ const SideNavigation = memo(function SideNavigation({
 							{onRetry && (
 								<button
 									onClick={onRetry}
-									className="text-xs px-3 py-1 bg-red-600 dark:bg-red-700 text-white rounded hover:bg-red-700 dark:hover:bg-red-600 transition-colors duration-200"
+									className="text-xs px-3 py-1 bg-red-600 dark:bg-red-700 text-white rounded hover:bg-red-700 dark:hover:bg-red-600 transition-colors duration-200 cursor-pointer"
 								>
 									Retry
 								</button>
@@ -449,7 +450,7 @@ const SideNavigation = memo(function SideNavigation({
 							className={({ isActive }) =>
 								`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 dark:bg-stone-900/30 text-stone-600 dark:text-stone-400'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
 										: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
@@ -464,7 +465,7 @@ const SideNavigation = memo(function SideNavigation({
 							className={({ isActive }) =>
 								`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 dark:bg-stone-900/30 text-stone-600 dark:text-stone-400'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
 										: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
@@ -473,20 +474,20 @@ const SideNavigation = memo(function SideNavigation({
 							<span className="ml-3 text-sm font-medium">All Tasks</span>
 						</NavLink>
 
-						{/* Drafts Navigation - Hidden until drafts list is implemented */}
-						{/* <NavLink
+						{/* Drafts Navigation */}
+						<NavLink
 							to="/drafts"
 							className={({ isActive }) =>
-								`flex items-center px-3 py-2 rounded-lg transition-colors ${
+								`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 text-stone-600'
-										: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
+										: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
 						>
 							<Icons.Draft />
 							<span className="ml-3 text-sm font-medium">Drafts</span>
-						</NavLink> */}
+						</NavLink>
 					</div>
 				)}
 
@@ -530,11 +531,11 @@ const SideNavigation = memo(function SideNavigation({
 										filteredDocs.map((doc) => (
 											<NavLink
 												key={doc.id}
-												to={`/documentation/${stripIdPrefix(doc.id)}/${encodeURIComponent(doc.title)}`}
+												to={`/documentation/${stripIdPrefix(doc.id)}/${sanitizeUrlTitle(doc.title)}`}
 												className={({ isActive }) =>
 													`flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
 														isActive
-															? 'bg-stone-50 dark:bg-stone-900/30 text-stone-600 dark:text-stone-400'
+															? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
 															: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 													}`
 												}
@@ -589,11 +590,11 @@ const SideNavigation = memo(function SideNavigation({
 										filteredDecisions.map((decision) => (
 											<NavLink
 												key={decision.id}
-												to={`/decisions/${stripIdPrefix(decision.id)}/${encodeURIComponent(decision.title)}`}
+												to={`/decisions/${stripIdPrefix(decision.id)}/${sanitizeUrlTitle(decision.title)}`}
 												className={({ isActive }) =>
 													`flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
 														isActive
-															? 'bg-stone-50 dark:bg-stone-900/30 text-stone-600 dark:text-stone-400'
+															? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
 															: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 													}`
 												}
@@ -618,7 +619,7 @@ const SideNavigation = memo(function SideNavigation({
 							className={({ isActive }) =>
 								`flex items-center justify-center p-3 rounded-md transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 dark:bg-stone-900/30 text-stone-700 dark:text-stone-400'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400'
 										: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
@@ -634,7 +635,7 @@ const SideNavigation = memo(function SideNavigation({
 							className={({ isActive }) =>
 								`flex items-center justify-center p-3 rounded-md transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 dark:bg-stone-900/30 text-stone-700 dark:text-stone-400'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400'
 										: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
@@ -643,23 +644,23 @@ const SideNavigation = memo(function SideNavigation({
 								<Icons.List />
 							</div>
 						</NavLink>
-						{/* Drafts Navigation - Hidden until drafts list is implemented */}
-						{/* <NavLink
+						{/* Drafts Navigation */}
+						<NavLink
 							to="/drafts"
 							data-tooltip-id="sidebar-tooltip"
 							data-tooltip-content="Drafts"
 							className={({ isActive }) =>
-								`flex items-center justify-center p-3 rounded-md transition-colors ${
+								`flex items-center justify-center p-3 rounded-md transition-colors duration-200 ${
 									isActive
-										? 'bg-stone-50 text-stone-700'
-										: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+										? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400'
+										: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 								}`
 							}
 						>
 							<div className="w-6 h-6 flex items-center justify-center">
 								<Icons.Draft />
 							</div>
-						</NavLink> */}
+						</NavLink>
 						<button
 							onClick={() => {
 								setIsCollapsed(false);
@@ -669,7 +670,7 @@ const SideNavigation = memo(function SideNavigation({
 							data-tooltip-content="Documentation"
 							className={`flex items-center justify-center p-3 rounded-md transition-colors duration-200 cursor-pointer w-full ${
 								location.pathname.startsWith('/documentation')
-									? 'bg-stone-50 dark:bg-stone-900/30 text-stone-700 dark:text-stone-400'
+									? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400'
 									: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 							}`}
 						>
@@ -686,7 +687,7 @@ const SideNavigation = memo(function SideNavigation({
 							data-tooltip-content="Decisions"
 							className={`flex items-center justify-center p-3 rounded-md transition-colors duration-200 cursor-pointer w-full ${
 								location.pathname.startsWith('/decisions')
-									? 'bg-stone-50 dark:bg-stone-900/30 text-stone-700 dark:text-stone-400'
+									? 'bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400'
 									: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
 							}`}
 						>
@@ -697,6 +698,43 @@ const SideNavigation = memo(function SideNavigation({
 					</div>
 				)}
 			</nav>
+			
+			{/* Settings Button - Bottom Left */}
+			<div className={`border-t border-gray-200 dark:border-gray-700 ${isCollapsed ? 'px-2 py-2' : 'px-4 py-4'}`}>
+				{!isCollapsed ? (
+					<NavLink
+						to="/settings"
+						className={({ isActive }) =>
+							`flex items-center px-3 py-2 rounded-lg transition-colors duration-200 ${
+								isActive
+									? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 font-medium'
+									: 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+							}`
+						}
+					>
+						<Icons.DocumentSettings />
+						<span className="ml-3 text-sm font-medium">Settings</span>
+					</NavLink>
+				) : (
+					<NavLink
+						to="/settings"
+						data-tooltip-id="sidebar-tooltip"
+						data-tooltip-content="Settings"
+						className={({ isActive }) =>
+							`flex items-center justify-center p-3 rounded-md transition-colors duration-200 ${
+								isActive
+									? 'bg-stone-50 dark:bg-stone-900/30 text-stone-700 dark:text-stone-400'
+									: 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+							}`
+						}
+					>
+						<div className="w-6 h-6 flex items-center justify-center">
+							<Icons.DocumentSettings />
+						</div>
+					</NavLink>
+				)}
+			</div>
+			
 			<Tooltip id="sidebar-tooltip" place="right" />
 			</div>
 		</ErrorBoundary>

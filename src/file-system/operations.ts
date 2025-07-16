@@ -26,36 +26,46 @@ export class FileSystem {
 	}
 
 	private async getBacklogDir(): Promise<string> {
+		// Ensure migration is checked if needed
 		if (!this.cachedConfig) {
 			this.cachedConfig = await this.loadConfigDirect();
 		}
-		const configuredDir = this.cachedConfig?.backlogDirectory || DEFAULT_DIRECTORIES.BACKLOG;
-		return join(this.projectRoot, configuredDir);
+		// Always use "backlog" as the directory name - no configuration needed
+		return join(this.projectRoot, DEFAULT_DIRECTORIES.BACKLOG);
 	}
 
 	private async loadConfigDirect(): Promise<BacklogConfig | null> {
 		try {
-			const configPath = join(this.projectRoot, DEFAULT_DIRECTORIES.BACKLOG, DEFAULT_FILES.CONFIG);
+			// First try the standard "backlog" directory
+			let configPath = join(this.projectRoot, DEFAULT_DIRECTORIES.BACKLOG, DEFAULT_FILES.CONFIG);
+			let file = Bun.file(configPath);
+			let exists = await file.exists();
 
-			// Check if file exists first to avoid hanging on Windows
-			const file = Bun.file(configPath);
-			const exists = await file.exists();
+			// If not found, check for legacy ".backlog" directory and migrate it
+			if (!exists) {
+				const legacyBacklogDir = join(this.projectRoot, ".backlog");
+				const legacyConfigPath = join(legacyBacklogDir, DEFAULT_FILES.CONFIG);
+				const legacyFile = Bun.file(legacyConfigPath);
+				const legacyExists = await legacyFile.exists();
+
+				if (legacyExists) {
+					// Migrate legacy .backlog directory to backlog
+					const newBacklogDir = join(this.projectRoot, DEFAULT_DIRECTORIES.BACKLOG);
+					await rename(legacyBacklogDir, newBacklogDir);
+
+					// Update paths to use the new location
+					configPath = join(this.projectRoot, DEFAULT_DIRECTORIES.BACKLOG, DEFAULT_FILES.CONFIG);
+					file = Bun.file(configPath);
+					exists = true;
+				}
+			}
 
 			if (!exists) {
 				return null;
 			}
 
 			const content = await file.text();
-			const config = this.parseConfig(content);
-
-			// If config exists but has no backlogDirectory field, this is a legacy config
-			// Set it to .backlog for backward compatibility and save it
-			if (config && config.backlogDirectory === undefined) {
-				config.backlogDirectory = ".backlog";
-				await this.saveConfig(config);
-			}
-
-			return config;
+			return this.parseConfig(content);
 		} catch (_error) {
 			return null;
 		}
@@ -410,7 +420,7 @@ export class FileSystem {
 	async loadDecision(decisionId: string): Promise<Decision | null> {
 		try {
 			const decisionsDir = await this.getDecisionsDir();
-			const files = await Array.fromAsync(new Bun.Glob("*.md").scan({ cwd: decisionsDir }));
+			const files = await Array.fromAsync(new Bun.Glob("decision-*.md").scan({ cwd: decisionsDir }));
 
 			// Normalize ID - remove "decision-" prefix if present
 			const normalizedId = decisionId.replace(/^decision-/, "");
@@ -430,7 +440,9 @@ export class FileSystem {
 	async saveDocument(document: Document, subPath = ""): Promise<void> {
 		const docsDir = await this.getDocsDir();
 		const dir = join(docsDir, subPath);
-		const filename = `doc-${document.id} - ${this.sanitizeFilename(document.title)}.md`;
+		// Normalize ID - remove "doc-" prefix if present
+		const normalizedId = document.id.replace(/^doc-/, "");
+		const filename = `doc-${normalizedId} - ${this.sanitizeFilename(document.title)}.md`;
 		const filepath = join(dir, filename);
 		const content = serializeDocument(document);
 
@@ -613,9 +625,6 @@ export class FileSystem {
 				case "max_column_width":
 					config.maxColumnWidth = Number.parseInt(value, 10);
 					break;
-				case "backlog_directory":
-					config.backlogDirectory = value.replace(/["']/g, "");
-					break;
 				case "default_editor":
 					config.defaultEditor = value.replace(/["']/g, "");
 					break;
@@ -631,6 +640,9 @@ export class FileSystem {
 				case "auto_commit":
 					config.autoCommit = value.toLowerCase() === "true";
 					break;
+				case "zero_padded_ids":
+					config.zeroPaddedIds = Number.parseInt(value, 10);
+					break;
 			}
 		}
 
@@ -644,12 +656,12 @@ export class FileSystem {
 			defaultStatus: config.defaultStatus,
 			dateFormat: config.dateFormat || "yyyy-mm-dd",
 			maxColumnWidth: config.maxColumnWidth,
-			backlogDirectory: config.backlogDirectory,
 			defaultEditor: config.defaultEditor,
 			autoOpenBrowser: config.autoOpenBrowser,
 			defaultPort: config.defaultPort,
 			remoteOperations: config.remoteOperations,
 			autoCommit: config.autoCommit,
+			zeroPaddedIds: config.zeroPaddedIds,
 		};
 	}
 
@@ -664,12 +676,12 @@ export class FileSystem {
 			`milestones: [${config.milestones.map((m) => `"${m}"`).join(", ")}]`,
 			`date_format: ${config.dateFormat}`,
 			...(config.maxColumnWidth ? [`max_column_width: ${config.maxColumnWidth}`] : []),
-			...(config.backlogDirectory ? [`backlog_directory: "${config.backlogDirectory}"`] : []),
 			...(config.defaultEditor ? [`default_editor: "${config.defaultEditor}"`] : []),
 			...(typeof config.autoOpenBrowser === "boolean" ? [`auto_open_browser: ${config.autoOpenBrowser}`] : []),
 			...(config.defaultPort ? [`default_port: ${config.defaultPort}`] : []),
 			...(typeof config.remoteOperations === "boolean" ? [`remote_operations: ${config.remoteOperations}`] : []),
 			...(typeof config.autoCommit === "boolean" ? [`auto_commit: ${config.autoCommit}`] : []),
+			...(typeof config.zeroPaddedIds === "number" ? [`zero_padded_ids: ${config.zeroPaddedIds}`] : []),
 		];
 
 		return `${lines.join("\n")}\n`;
