@@ -1553,7 +1553,7 @@ boardCmd
 			const projectName = config?.projectName || basename(cwd);
 
 			if (options.readme) {
-				await updateReadmeWithBoard(finalTasks, statuses, projectName);
+				await updateReadmeWithBoard(finalTasks, statuses, projectName, version);
 				console.log("Updated README.md with Kanban board.");
 			} else {
 				// Use filename argument or default to Backlog.md
