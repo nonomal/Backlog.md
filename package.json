@@ -1,6 +1,6 @@
 {
 	"name": "backlog.md",
-	"version": "1.5.0",
+	"version": "1.5.2",
 	"type": "module",
 	"bin": {
 		"backlog": "cli/index.js"
