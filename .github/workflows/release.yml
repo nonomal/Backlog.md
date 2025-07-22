@@ -226,7 +226,11 @@ jobs:
         run: |
           TAG="${GITHUB_REF##refs/tags/v}"
           jq ".version = \"$TAG\"" package.json > tmp.json && mv tmp.json package.json
-      - run: bun run cli board export --readme
+      - name: Export board to README with version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF##refs/tags/v}"
+          bun run cli board export --readme --version "v$TAG"
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:

@@ -1494,6 +1494,7 @@ boardCmd
 	.description("export kanban board to markdown file")
 	.option("--force", "overwrite existing file without confirmation")
 	.option("--readme", "export to README.md with markers")
+	.option("--version <version>", "version to include in the export")
 	.action(async (filename, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
@@ -1553,7 +1554,9 @@ boardCmd
 			const projectName = config?.projectName || basename(cwd);
 
 			if (options.readme) {
-				await updateReadmeWithBoard(finalTasks, statuses, projectName, version);
+				// Use version from option if provided, otherwise use the CLI version
+				const exportVersion = options.version || version;
+				await updateReadmeWithBoard(finalTasks, statuses, projectName, exportVersion);
 				console.log("Updated README.md with Kanban board.");
 			} else {
 				// Use filename argument or default to Backlog.md
