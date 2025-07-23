@@ -36,7 +36,7 @@
 
 ---
 
-## <img src="./.github/5-minute-tour-256.png" alt="5-minute tour" width="32" height="32" style="vertical-align: middle"> Five‑minute tour
+## <img src="./.github/5-minute-tour-256.png" alt="5-minute tour" width="28" height="28" align="center"> Five‑minute tour
 ```bash
 # 1. Make sure you have Backlog.md installed  
 bun/npm i -g backlog.md or brew install backlog-md
@@ -68,7 +68,7 @@ All data is saved under `backlog` folder as human‑readable Markdown with the f
 
 ---
 
-## <img src="./.github/web-interface-256.png" alt="Web Interface" width="32" height="32" style="vertical-align: middle"> Web Interface
+## <img src="./.github/web-interface-256.png" alt="Web Interface" width="28" height="28" align="center"> Web Interface
 
 Launch a modern, responsive web interface for visual task management:
 
@@ -95,7 +95,7 @@ The web interface provides:
 
 ---
 
-## <img src="./.github/cli-reference-256.png" alt="CLI Reference" width="32" height="32" style="vertical-align: middle"> CLI reference
+## <img src="./.github/cli-reference-256.png" alt="CLI Reference" width="28" height="28" align="center"> CLI reference
 
 ### Project Setup
 
@@ -204,7 +204,7 @@ Full help: `backlog --help`
 
 ---
 
-## <img src="./.github/configuration-256.png" alt="Configuration" width="32" height="32" style="vertical-align: middle"> Configuration
+## <img src="./.github/configuration-256.png" alt="Configuration" width="28" height="28" align="center"> Configuration
 
 Backlog.md merges the following layers (highest → lowest):
 
@@ -234,7 +234,7 @@ Key options:
 
 ---
 
-## <img src="./.github/sharing-export-256.png" alt="Sharing & Export" width="32" height="32" style="vertical-align: middle"> Sharing & Export
+## <img src="./.github/sharing-export-256.png" alt="Sharing & Export" width="28" height="28" align="center"> Sharing & Export
 
 ### Board Export
 
