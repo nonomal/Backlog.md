@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
+import { platform } from "node:os";
 import { join } from "node:path";
 import type { BacklogConfig } from "../types/index.ts";
 import { isEditorAvailable, openInEditor, resolveEditor } from "../utils/editor.ts";
@@ -158,6 +159,35 @@ describe("Editor utilities", () => {
 
 			const success = await openInEditor(testFile, config);
 			expect(success).toBe(false);
+		});
+
+		it("should wait for editor to complete before returning", async () => {
+			// Create a simple Node.js script that delays then exits
+			// This works cross-platform without needing shell/batch scripts
+			const scriptPath = join(TEST_DIR, "test-editor.js");
+			const scriptContent = `
+				setTimeout(() => {
+					process.exit(0);
+				}, 100);
+			`;
+			await Bun.write(scriptPath, scriptContent);
+
+			const config: BacklogConfig = {
+				projectName: "Test",
+				statuses: ["To Do", "Done"],
+				labels: [],
+				milestones: [],
+				dateFormat: "yyyy-mm-dd",
+				defaultEditor: `node ${scriptPath}`,
+			};
+
+			const startTime = Date.now();
+			const success = await openInEditor(testFile, config);
+			const endTime = Date.now();
+
+			expect(success).toBe(true);
+			// Should have waited at least 90ms (allowing some margin)
+			expect(endTime - startTime).toBeGreaterThanOrEqual(90);
 		});
 	});
 });
