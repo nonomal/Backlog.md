@@ -36,34 +36,39 @@
 
 ---
 
-### Five‑minute tour
+## <img src="./.github/5-minute-tour-256.png" alt="5-minute tour" width="32" height="32" style="vertical-align: middle"> Five‑minute tour
+```bash
+# 1. Make sure you have Backlog.md installed  
+bun/npm i -g backlog.md or brew install backlog-md
 
-```markdown
-# Make sure you have Backlog.md installed
-bun/npm i -g backlog.md
+# 2. Bootstrap a repo + backlog  
+backlog init "My Awesome Project"
 
-# 1. Bootstrap a repo + backlog
-backlog init hello-
-
-# 2. Capture work
+# 3. Capture work  
 backlog task create "Render markdown as kanban"
 
-# 3. See where you stand
-backlog board view
+# 4. See where you stand  
+backlog board view or backlog browser
 
-# 4. Working with AI
+# 5. Create tasks using Claude-code, Gemini, Codex or Jules
 Claude I would like to build a search functionality in the web view that searches for:
 * tasks
 * docs
 * decisions
-Please create relevant tasks to tackle this request.
+  Please create relevant tasks to tackle this request.
+
+# 6. Assign tasks to AI
+Claude please implement all tasks related to the web search functionality (task-10, task-11, task-12)
+* before starting to write code use 'ultrathink mode' to prepare an implementation plan
+* use multiple sub-agents when possible and dependencies allow
 ```
 
-All data is saved under `backlog` folder as human‑readable Markdown with the following format `task-<task-id> - <task-title>.md` (e.g. `task-12 - Fix typo.md`).
+
+All data is saved under `backlog` folder as human‑readable Markdown with the following format `task-<task-id> - <task-title>.md` (e.g. `task-10 - Add core search functionality.md`).
 
 ---
 
-### Web Interface
+## <img src="./.github/web-interface-256.png" alt="Web Interface" width="32" height="32" style="vertical-align: middle"> Web Interface
 
 Launch a modern, responsive web interface for visual task management:
 
@@ -90,7 +95,7 @@ The web interface provides:
 
 ---
 
-## CLI reference
+## <img src="./.github/cli-reference-256.png" alt="CLI Reference" width="32" height="32" style="vertical-align: middle"> CLI reference
 
 ### Project Setup
 
@@ -199,14 +204,14 @@ Full help: `backlog --help`
 
 ---
 
-## Configuration
+## <img src="./.github/configuration-256.png" alt="Configuration" width="32" height="32" style="vertical-align: middle"> Configuration
 
 Backlog.md merges the following layers (highest → lowest):
 
-1. CLI flags  
-2. `backlog/config.yml` (per‑project)  
-3. `~/backlog/user` (per‑user)  
-4. Built‑ins  
+1. CLI flags
+2. `backlog/config.yml` (per‑project)
+3. `~/backlog/user` (per‑user)
+4. Built‑ins
 
 Key options:
 
@@ -229,7 +234,7 @@ Key options:
 
 ---
 
-## Sharing & Export
+## <img src="./.github/sharing-export-256.png" alt="Sharing & Export" width="32" height="32" style="vertical-align: middle"> Sharing & Export
 
 ### Board Export
 
@@ -281,6 +286,6 @@ Generated on: 2025-07-22 21:26:53
 
 <!-- BOARD_END -->
 
-## License
+### License
 
 Backlog.md is released under the **MIT License** – do anything, just give credit. See [LICENSE](LICENSE).
