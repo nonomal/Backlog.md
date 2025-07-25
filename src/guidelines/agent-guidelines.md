@@ -9,6 +9,11 @@
 
 ## 2. Defining Tasks
 
+### Understand the Scope and the purpose
+
+Ask questions to the user if something is not clear or ambiguous.
+Break down the task into smaller, manageable parts if it is too large or complex.
+
 ### **Title**
 
 Use a clear brief title that summarizes the task.
@@ -20,7 +25,8 @@ should explain the purpose and context of the task. Code snippets should be avoi
 
 ### **Acceptance Criteria**: (The **"what"**)
 
-List specific, measurable outcomes that define what means to reach the goal from the description. Use checkboxes (`- [ ]`) for tracking.
+List specific, measurable outcomes that define what means to reach the goal from the description. Use checkboxes (
+`- [ ]`) for tracking.
 When defining `## Acceptance Criteria` for a task, focus on **outcomes, behaviors, and verifiable requirements** rather
 than step-by-step implementation details.
 Acceptance Criteria (AC) define *what* conditions must be met for the task to be considered complete.
@@ -41,6 +47,15 @@ They should be testable and confirm that the core purpose of the task is achieve
 
 Once a task is created it will be stored in `backlog/tasks/` directory as a Markdown file with the format
 `task-<id> - <title>.md` (e.g. `task-42 - Add GraphQL resolver.md`).
+
+### Task Breakdown Strategy
+
+When breaking down features:
+
+1. Identify the foundational components first
+2. Create tasks in dependency order (foundations before features)
+3. Ensure each task delivers value independently
+4. Avoid creating tasks that block each other
 
 ### Additional task requirements
 
@@ -72,7 +87,7 @@ Short, imperative explanation of the goal of the task and why it is needed.
 - [ ] Error response matches REST
 - [ ] P95 latency ≤ 50 ms under 100 RPS
 
-## Implementation Plan (the how) (added after starting work on a task)
+## Implementation Plan (the how) (added after putting the task in progress but before implementing any code change)
 
 1. Research existing GraphQL resolver patterns
 2. Implement basic resolver with error handling
@@ -80,7 +95,7 @@ Short, imperative explanation of the goal of the task and why it is needed.
 4. Write unit and integration tests
 5. Benchmark performance under load
 
-## Implementation Notes (only added after finishing work on a task)
+## Implementation Notes (only added after finishing the code implementation of a task)
 
 - Approach taken
 - Features implemented or modified
@@ -158,24 +173,35 @@ A task is **Done** only when **ALL** of the following are complete:
 
 ## 9. Handy CLI Commands
 
-| Purpose          | Command                                                                |
-|------------------|------------------------------------------------------------------------|
-| Create task      | `backlog task create "Add OAuth"`                                      |
-| Create with desc | `backlog task create "Feature" -d "Enables users to use this feature"` |
-| Create with AC   | `backlog task create "Feature" --ac "Must work,Must be tested"`        |
-| Create with deps | `backlog task create "Feature" --dep task-1,task-2`                    |
-| Create sub task  | `backlog task create -p 14 "Add Google auth"`                          |
-| List tasks       | `backlog task list --plain`                                            |
-| View detail      | `backlog task 7 --plain`                                               |
-| Edit             | `backlog task edit 7 -a @{yourself} -l auth,backend`                   |
-| Add plan         | `backlog task edit 7 --plan "Implementation approach"`                 |
-| Add AC           | `backlog task edit 7 --ac "New criterion,Another one"`                 |
-| Add deps         | `backlog task edit 7 --dep task-1,task-2`                              |
-| Add notes        | `backlog task edit 7 --notes "We added this and that feature because"` |
-| Mark as done     | `backlog task edit 7 -s "Done"`                                        |
-| Archive          | `backlog task archive 7`                                               |
-| Draft flow       | `backlog draft create "Spike GraphQL"` → `backlog draft promote 3.1`   |
-| Demote to draft  | `backlog task demote <task-id>`                                        |
+| Action                  | Example                                                                                                                                                       |
+|-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Create task             | `backlog task create "Add OAuth System"`                                                                                                                      |
+| Create with description | `backlog task create "Feature" -d "Add authentication system"`                                                                                                |
+| Create with assignee    | `backlog task create "Feature" -a @sara`                                                                                                                      |
+| Create with status      | `backlog task create "Feature" -s "In Progress"`                                                                                                              |
+| Create with labels      | `backlog task create "Feature" -l auth,backend`                                                                                                               |
+| Create with priority    | `backlog task create "Feature" --priority high`                                                                                                               |
+| Create with plan        | `backlog task create "Feature" --plan "1. Research\n2. Implement"`                                                                                            |
+| Create with AC          | `backlog task create "Feature" --ac "Must work,Must be tested"`                                                                                               |
+| Create with notes       | `backlog task create "Feature" --notes "Started initial research"`                                                                                            |
+| Create with deps        | `backlog task create "Feature" --dep task-1,task-2`                                                                                                           |
+| Create sub task         | `backlog task create -p 14 "Add Login with Google"`                                                                                                           |
+| Create (all options)    | `backlog task create "Feature" -d "Description" -a @sara -s "To Do" -l auth --priority high --ac "Must work" --notes "Initial setup done" --dep task-1 -p 14` |
+| List tasks              | `backlog task list [-s <status>] [-a <assignee>] [-p <parent>]`                                                                                               |
+| List by parent          | `backlog task list --parent 42` or `backlog task list -p task-42`                                                                                             |
+| View detail             | `backlog task 7` (interactive UI, press 'E' to edit in editor)                                                                                                |
+| View (AI mode)          | `backlog task 7 --plain`                                                                                                                                      |
+| Edit                    | `backlog task edit 7 -a @sara -l auth,backend`                                                                                                                |
+| Add plan                | `backlog task edit 7 --plan "Implementation approach"`                                                                                                        |
+| Add AC                  | `backlog task edit 7 --ac "New criterion,Another one"`                                                                                                        |
+| Add notes               | `backlog task edit 7 --notes "Completed X, working on Y"`                                                                                                     |
+| Add deps                | `backlog task edit 7 --dep task-1 --dep task-2`                                                                                                               |
+| Archive                 | `backlog task archive 7`                                                                                                                                      |
+| Create draft            | `backlog task create "Feature" --draft`                                                                                                                       |
+| Draft flow              | `backlog draft create "Spike GraphQL"` → `backlog draft promote 3.1`                                                                                          |
+| Demote to draft         | `backlog task demote <id>`                                                                                                                                    |
+
+Full help: `backlog --help`
 
 ## 10. Tips for AI Agents
 
