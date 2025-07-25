@@ -2,7 +2,7 @@
 <p align="center">Markdown‑native Task Manager &amp; Kanban visualizer for any Git repository</p>
 
 <p align="center">
-<code>npm i -g backlog.md</code> or <code>bun add -g backlog.md</code> or <code>brew install backlog-md</code>
+<code>npm i -g backlog.md</code> or <code>bun add -g backlog.md</code> or <code>brew install backlog-md</code> or <code>nix run github:MrLesk/Backlog.md</code>
 </p>
 
 ![Backlog demo GIF using: backlog board](./.github/backlog.gif)
@@ -36,34 +36,39 @@
 
 ---
 
-### Five‑minute tour
+## <img src="./.github/5-minute-tour-256.png" alt="5-minute tour" width="28" height="28" align="center"> Five‑minute tour
+```bash
+# 1. Make sure you have Backlog.md installed  
+bun/npm i -g backlog.md or brew install backlog-md
 
-```markdown
-# Make sure you have Backlog.md installed
-bun/npm i -g backlog.md
+# 2. Bootstrap a repo + backlog  
+backlog init "My Awesome Project"
 
-# 1. Bootstrap a repo + backlog
-backlog init hello-
-
-# 2. Capture work
+# 3. Capture work  
 backlog task create "Render markdown as kanban"
 
-# 3. See where you stand
-backlog board view
+# 4. See where you stand  
+backlog board view or backlog browser
 
-# 4. Working with AI
+# 5. Create tasks using Claude-code, Gemini, Codex or Jules
 Claude I would like to build a search functionality in the web view that searches for:
 * tasks
 * docs
 * decisions
-Please create relevant tasks to tackle this request.
+  Please create relevant tasks to tackle this request.
+
+# 6. Assign tasks to AI
+Claude please implement all tasks related to the web search functionality (task-10, task-11, task-12)
+* before starting to write code use 'ultrathink mode' to prepare an implementation plan
+* use multiple sub-agents when possible and dependencies allow
 ```
 
-All data is saved under `backlog` folder as human‑readable Markdown with the following format `task-<task-id> - <task-title>.md` (e.g. `task-12 - Fix typo.md`).
+
+All data is saved under `backlog` folder as human‑readable Markdown with the following format `task-<task-id> - <task-title>.md` (e.g. `task-10 - Add core search functionality.md`).
 
 ---
 
-### Web Interface
+## <img src="./.github/web-interface-256.png" alt="Web Interface" width="28" height="28" align="center"> Web Interface
 
 Launch a modern, responsive web interface for visual task management:
 
@@ -90,7 +95,7 @@ The web interface provides:
 
 ---
 
-## CLI reference
+## <img src="./.github/cli-reference-256.png" alt="CLI Reference" width="28" height="28" align="center"> CLI reference
 
 ### Project Setup
 
@@ -105,6 +110,8 @@ The `backlog init` command provides comprehensive project setup with interactive
 - **Default editor** - editor command for opening tasks (detects from environment)
 - **Remote operations** - enable/disable fetching tasks from remote branches
 - **Web UI settings** - port and browser auto-open preferences
+- **Agent guidelines** - AI agent instruction files (CLAUDE.md, .cursorrules, etc.)
+- **Claude Code agent** - optional Backlog.md agent for enhanced task management
 
 When re-initializing an existing project, all current configuration values are preserved and pre-populated in prompts, allowing you to update only what you need.
 
@@ -149,6 +156,7 @@ When re-initializing an existing project, all current configuration values are p
 |-------------|------------------------------------------------------|
 | Kanban board      | `backlog board` (interactive UI, press 'E' to edit in editor) |
 | Export board | `backlog board export [file]` (exports Kanban board to markdown) |
+| Export with version | `backlog board export --export-version "v1.0.0"` (includes version in export) |
 
 ### Web Interface
 
@@ -198,14 +206,14 @@ Full help: `backlog --help`
 
 ---
 
-## Configuration
+## <img src="./.github/configuration-256.png" alt="Configuration" width="28" height="28" align="center"> Configuration
 
 Backlog.md merges the following layers (highest → lowest):
 
-1. CLI flags  
-2. `backlog/config.yml` (per‑project)  
-3. `~/backlog/user` (per‑user)  
-4. Built‑ins  
+1. CLI flags
+2. `backlog/config.yml` (per‑project)
+3. `~/backlog/user` (per‑user)
+4. Built‑ins
 
 Key options:
 
@@ -220,6 +228,7 @@ Key options:
 | `auto_open_browser`| Open browser automatically | `true`            |
 | `remote_operations`| Enable remote git operations | `true`           |
 | `auto_commit`     | Automatically commit task changes | `false`       |
+| `zero_padded_ids` | Pad all IDs (tasks, docs, etc.) with leading zeros | `(disabled)`  |
 
 > **Note**: Set `remote_operations: false` to work offline. This disables git fetch operations and loads tasks from local branches only, useful when working without network connectivity.
 
@@ -227,7 +236,7 @@ Key options:
 
 ---
 
-## Sharing & Export
+## <img src="./.github/sharing-export-256.png" alt="Sharing & Export" width="28" height="28" align="center"> Sharing & Export
 
 ### Board Export
 
@@ -242,12 +251,40 @@ backlog board export project-status.md
 
 # Force overwrite existing file
 backlog board export --force
+
+# Export to README.md with board markers
+backlog board export --readme
+
+# Include a custom version string in the export
+backlog board export --export-version "v1.2.3"
+backlog board export --readme --export-version "Release 2024.12.1-beta"
 ```
 
 Perfect for sharing project status, creating reports, or storing snapshots in version control.
 
 ---
 
-## License
+<!-- BOARD_START -->
+
+## 📊 Backlog.md Project Status (v1.5.8)
+
+This board was automatically generated by [Backlog.md](https://backlog.md)
+
+Generated on: 2025-07-25 21:04:15
+
+| To Do | In Progress | Done |
+| --- | --- | --- |
+| **task-203** - Show meaningful description in web kanban<br>(Assignees: none, Labels: frontend, enhancement) | **└─ task-24.1** - CLI: Kanban board milestone view<br>(Assignees: @codex, Labels: none) | **task-205** - Fix Claude Code agent trying to use slash commands instead of backlog CLI<br>(Assignees: @claude, Labels: bug, agent) |
+| **task-201** - Add configurable git hooks bypass option<br>(Assignees: none, Labels: enhancement, git) |  | **task-204** - Add Experimental Claude Code backlog.md agent integration to init command<br>(Assignees: @claude, Labels: cli, integration, dx) |
+| **task-200** - Add Claude Code integration with workflow commands during init<br>(Assignees: none, Labels: enhancement, developer-experience) |  | **task-202** - Fix editor integration regression with Helix and other interactive editors<br>(Assignees: none, Labels: bug, regression, editor) |
+| **task-183** - Add ordinal field for custom task ordering in web UI<br>(Assignees: none, Labels: none) |  | **task-199** - Add version parameter to board export command<br>(Assignees: none, Labels: none) |
+| **task-181** - Add statistics dashboard to web UI<br>(Assignees: none, Labels: none) |  | **task-198** - Fix markdown content overflow beyond screen width<br>(Assignees: none, Labels: none) |
+| **task-180** - Add statistics overview command to CLI with TUI interface<br>(Assignees: none, Labels: none) |  | **task-197** - Fix decision page refresh showing blank screen<br>(Assignees: none, Labels: none) |
+| **task-175** - Add hour and minute to all dates in drafts, tasks, documents, decisions<br>(Assignees: none, Labels: none) |  | **task-196** - Add NixOS packaging support<br>(Assignees: none, Labels: none) |
+| **task-172** - Order tasks by status and ID in both web and CLI lists<br>(Assignees: none, Labels: none) |  | **task-191** - Migrate from Bun.spawn to Bun shell API<br>(Assignees: @gemini, @claude, Labels: refactoring, developer-experience) |
+
+<!-- BOARD_END -->
+
+### License
 
 Backlog.md is released under the **MIT License** – do anything, just give credit. See [LICENSE](LICENSE).

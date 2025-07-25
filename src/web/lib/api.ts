@@ -1,4 +1,4 @@
-import type { Decision, Document, Task, TaskStatus } from "../../types/index.ts";
+import type { BacklogConfig, Decision, Document, Task, TaskStatus } from "../../types/index.ts";
 
 const API_BASE = "/api";
 
@@ -50,7 +50,7 @@ export class ApiClient {
 	// Enhanced fetch with retry logic and better error handling
 	private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
 		const { retries = 3, timeout = 10000 } = this.config;
-		let lastError: Error;
+		let lastError: Error | undefined;
 
 		for (let attempt = 0; attempt <= retries; attempt++) {
 			try {
@@ -154,10 +154,24 @@ export class ApiClient {
 		return response.json();
 	}
 
-	async fetchConfig(): Promise<{ projectName: string }> {
+	async fetchConfig(): Promise<BacklogConfig> {
 		const response = await fetch(`${API_BASE}/config`);
 		if (!response.ok) {
 			throw new Error("Failed to fetch config");
+		}
+		return response.json();
+	}
+
+	async updateConfig(config: BacklogConfig): Promise<BacklogConfig> {
+		const response = await fetch(`${API_BASE}/config`, {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(config),
+		});
+		if (!response.ok) {
+			throw new Error("Failed to update config");
 		}
 		return response.json();
 	}

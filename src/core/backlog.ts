@@ -24,7 +24,7 @@ export class Core {
 		// Note: Config is loaded lazily when needed since constructor can't be async
 	}
 
-	private async ensureConfigLoaded(): Promise<void> {
+	async ensureConfigLoaded(): Promise<void> {
 		try {
 			const config = await this.fs.loadConfig();
 			this.git.setConfig(config);
@@ -37,8 +37,8 @@ export class Core {
 	}
 
 	private async getBacklogDirectoryName(): Promise<string> {
-		const config = await this.fs.loadConfig();
-		return config?.backlogDirectory || "backlog";
+		// Always use "backlog" as the directory name
+		return DEFAULT_DIRECTORIES.BACKLOG;
 	}
 
 	private async shouldAutoCommit(overrideValue?: boolean): Promise<boolean> {
@@ -169,7 +169,7 @@ export class Core {
 
 	async completeTask(taskId: string, autoCommit?: boolean): Promise<boolean> {
 		// Get paths before moving the file
-		const completedDir = await this.fs.getCompletedDir();
+		const completedDir = this.fs.completedDir;
 		const taskPath = await getTaskPath(taskId, this);
 		const taskFilename = await getTaskFilename(taskId, this);
 
@@ -260,7 +260,7 @@ export class Core {
 		const decision: Decision = {
 			id,
 			title,
-			date: new Date().toISOString().split("T")[0],
+			date: new Date().toISOString().split("T")[0]!,
 			status: "proposed",
 			context: "[Describe the context and problem that needs to be addressed]",
 			decision: "[Describe the decision that was made]",
@@ -290,7 +290,7 @@ export class Core {
 			id,
 			title,
 			type: "other" as const,
-			createdDate: new Date().toISOString().split("T")[0],
+			createdDate: new Date().toISOString().split("T")[0]!,
 			body: content,
 		};
 
@@ -309,7 +309,6 @@ export class Core {
 			defaultStatus: DEFAULT_STATUSES[0], // Use first status as default
 			dateFormat: "yyyy-mm-dd",
 			maxColumnWidth: 20, // Default for terminal display
-			backlogDirectory: DEFAULT_DIRECTORIES.BACKLOG, // Use new default
 			autoCommit: false, // Default to false for user control
 		};
 

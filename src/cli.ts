@@ -5,6 +5,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
 import prompts from "prompts";
+import { DEFAULT_DIRECTORIES } from "./constants/index.ts";
 import { filterTasksByLatestState, getLatestTaskStatesForIds } from "./core/cross-branch-tasks.ts";
 import { loadRemoteTasks, resolveTaskConflict, type TaskWithMetadata } from "./core/remote-tasks.ts";
 import {
@@ -13,7 +14,9 @@ import {
 	Core,
 	exportKanbanBoardToFile,
 	initializeGitRepository,
+	installClaudeAgent,
 	isGitRepository,
+	updateReadmeWithBoard,
 } from "./index.ts";
 import type { Decision, Document as DocType, Task } from "./types/index.ts";
 import { genericSelectList } from "./ui/components/generic-list.ts";
@@ -120,21 +123,70 @@ program
 				}
 			}
 
-			// Configuration prompts with intelligent defaults
-			const configPrompts = await prompts([
+			// Configuration prompts with intelligent defaults - step by step to ensure proper order
+			const basicPrompts = await prompts(
+				[
+					{
+						type: "confirm",
+						name: "autoCommit",
+						message: "Enable automatic git commits for task operations?",
+						hint: "When enabled, task changes are automatically committed to git",
+						initial: existingConfig?.autoCommit ?? false,
+					},
+					{
+						type: "confirm",
+						name: "remoteOperations",
+						message: "Enable remote git operations? (needed to fetch tasks from remote branches)",
+						hint: "Required for accessing tasks from feature branches and remote repos",
+						initial: existingConfig?.remoteOperations ?? true,
+					},
+					{
+						type: "confirm",
+						name: "enableZeroPadding",
+						message: "Enable zero-padded IDs for consistent formatting? (3 -> task-001, task-023)",
+						hint: "Example: task-001, doc-001 instead of task-1, doc-1",
+						initial: (existingConfig?.zeroPaddedIds ?? 0) > 0,
+					},
+				],
 				{
-					type: "confirm",
-					name: "autoCommit",
-					message: "Enable automatic git commits for task operations?",
-					hint: "When enabled, task changes are automatically committed to git",
-					initial: existingConfig?.autoCommit ?? false,
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
 				},
-				{
-					type: "confirm",
-					name: "remoteOperations",
-					message: "Enable remote git operations? (needed to fetch tasks from remote branches)",
-					initial: existingConfig?.remoteOperations ?? true,
-				},
+			);
+
+			// Zero-padding configuration (conditional) - ask immediately after enable question
+			let zeroPaddedIds: number | undefined;
+			if (basicPrompts.enableZeroPadding) {
+				const paddingPrompt = await prompts(
+					{
+						type: "number",
+						name: "paddingWidth",
+						message: "Number of digits for zero-padding:",
+						hint: "e.g., 3 creates task-001, task-002; 4 creates task-0001, task-0002",
+						initial: existingConfig?.zeroPaddedIds || 3,
+						min: 1,
+						max: 10,
+					},
+					{
+						onCancel: () => {
+							console.log("Aborting initialization.");
+							process.exit(1);
+						},
+					},
+				);
+
+				if (paddingPrompt?.paddingWidth) {
+					zeroPaddedIds = paddingPrompt.paddingWidth;
+				}
+			} else {
+				// User chose not to enable padding
+				zeroPaddedIds = 0;
+			}
+
+			// Web UI configuration prompt
+			const webUIPrompt = await prompts(
 				{
 					type: "confirm",
 					name: "configureWebUI",
@@ -142,21 +194,71 @@ program
 					hint: "Optional: Set custom port and browser behavior",
 					initial: false,
 				},
-			]);
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 
-			if (configPrompts === undefined) {
-				console.log("Aborting initialization.");
-				process.exit(1);
+			// Web UI configuration (conditional) - ask immediately after enable question
+			let webUIConfig: { defaultPort?: number; autoOpenBrowser?: boolean } = {};
+			if (webUIPrompt.configureWebUI) {
+				const webUIPrompts = await prompts(
+					[
+						{
+							type: "number",
+							name: "defaultPort",
+							message: "Default web UI port:",
+							hint: "Port number for the web interface (1-65535)",
+							initial: existingConfig?.defaultPort ?? 6420,
+							min: 1,
+							max: 65535,
+						},
+						{
+							type: "confirm",
+							name: "autoOpenBrowser",
+							message: "Automatically open browser when starting web UI?",
+							hint: "When enabled, 'backlog web' automatically opens your browser",
+							initial: existingConfig?.autoOpenBrowser ?? true,
+						},
+					],
+					{
+						onCancel: () => {
+							console.log("Aborting initialization.");
+							process.exit(1);
+						},
+					},
+				);
+
+				if (webUIPrompts !== undefined) {
+					webUIConfig = webUIPrompts;
+				}
 			}
 
+			// Combine all configuration responses
+			const configPrompts = {
+				...basicPrompts,
+				configureWebUI: webUIPrompt.configureWebUI,
+			};
+
 			// Default editor configuration - always prompt during init
-			const editorPrompt = await prompts({
-				type: "text",
-				name: "editor",
-				message: "Default editor command (optional):",
-				hint: "e.g., 'code --wait', 'vim', 'nano'",
-				initial: existingConfig?.defaultEditor || process.env.EDITOR || process.env.VISUAL || "",
-			});
+			const editorPrompt = await prompts(
+				{
+					type: "text",
+					name: "editor",
+					message: "Default editor command (optional):",
+					hint: "e.g., 'code --wait', 'vim', 'nano'",
+					initial: existingConfig?.defaultEditor || process.env.EDITOR || process.env.VISUAL || "",
+				},
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 
 			let defaultEditor: string | undefined;
 			if (editorPrompt?.editor) {
@@ -167,40 +269,23 @@ program
 				} else {
 					console.warn(`Warning: Editor command '${editorPrompt.editor}' not found in PATH`);
 					// Still allow them to set it even if not found
-					const confirmAnyway = await prompts({
-						type: "confirm",
-						name: "confirm",
-						message: "Editor not found in PATH. Set it anyway?",
-						initial: false,
-					});
+					const confirmAnyway = await prompts(
+						{
+							type: "confirm",
+							name: "confirm",
+							message: "Editor not found in PATH. Set it anyway?",
+							initial: false,
+						},
+						{
+							onCancel: () => {
+								console.log("Aborting initialization.");
+								process.exit(1);
+							},
+						},
+					);
 					if (confirmAnyway?.confirm) {
 						defaultEditor = editorPrompt.editor;
 					}
-				}
-			}
-
-			// Web UI configuration (optional)
-			let webUIConfig: { defaultPort?: number; autoOpenBrowser?: boolean } = {};
-			if (configPrompts.configureWebUI) {
-				const webUIPrompts = await prompts([
-					{
-						type: "number",
-						name: "defaultPort",
-						message: "Default web UI port:",
-						initial: existingConfig?.defaultPort ?? 6420,
-						min: 1,
-						max: 65535,
-					},
-					{
-						type: "confirm",
-						name: "autoOpenBrowser",
-						message: "Automatically open browser when starting web UI?",
-						initial: existingConfig?.autoOpenBrowser ?? true,
-					},
-				]);
-
-				if (webUIPrompts !== undefined) {
-					webUIConfig = webUIPrompts;
 				}
 			}
 
@@ -213,18 +298,43 @@ program
 				".github/copilot-instructions.md",
 			] as const;
 
-			const { files: selected } = await prompts({
-				type: "multiselect",
-				name: "files",
-				message: "Select agent instruction files to update",
-				choices: agentOptions.map((name) => ({
-					title: name === ".github/copilot-instructions.md" ? "Copilot" : name,
-					value: name,
-				})),
-				hint: "Space to select, Enter to confirm",
-				instructions: false,
-			});
+			const { files: selected } = await prompts(
+				{
+					type: "multiselect",
+					name: "files",
+					message: "Select agent instruction files to update",
+					choices: agentOptions.map((name) => ({
+						title: name === ".github/copilot-instructions.md" ? "Copilot" : name,
+						value: name,
+					})),
+					hint: "Space to select, Enter to confirm",
+					instructions: false,
+				},
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 			const files: AgentInstructionFile[] = (selected ?? []) as AgentInstructionFile[];
+
+			// Claude agent installation prompt
+			const claudeAgentPrompt = await prompts(
+				{
+					type: "confirm",
+					name: "installClaudeAgent",
+					message: "Install Claude Code Backlog.md agent for enhanced task management?",
+					hint: "Adds specialized agent to .claude/agents for better Backlog.md integration",
+					initial: true,
+				},
+				{
+					onCancel: () => {
+						console.log("Aborting initialization.");
+						process.exit(1);
+					},
+				},
+			);
 
 			// Prepare configuration object preserving existing values
 			const config = {
@@ -235,7 +345,6 @@ program
 				defaultStatus: existingConfig?.defaultStatus || "To Do",
 				dateFormat: existingConfig?.dateFormat || "yyyy-mm-dd",
 				maxColumnWidth: existingConfig?.maxColumnWidth || 20,
-				backlogDirectory: existingConfig?.backlogDirectory || "backlog",
 				autoCommit: configPrompts.autoCommit,
 				remoteOperations: configPrompts.remoteOperations,
 				...(defaultEditor && { defaultEditor }),
@@ -252,6 +361,8 @@ program
 						: existingConfig?.autoOpenBrowser !== undefined
 							? existingConfig.autoOpenBrowser
 							: true,
+				// Zero-padding config: only include if enabled (> 0)
+				...(zeroPaddedIds && zeroPaddedIds > 0 && { zeroPaddedIds }),
 			};
 
 			// Show configuration summary
@@ -262,6 +373,11 @@ program
 			if (config.defaultEditor) console.log(`  Default Editor: ${config.defaultEditor}`);
 			if (config.defaultPort) console.log(`  Web UI Port: ${config.defaultPort}`);
 			if (config.autoOpenBrowser !== undefined) console.log(`  Auto Open Browser: ${config.autoOpenBrowser}`);
+			if (config.zeroPaddedIds) {
+				console.log(`  Zero-Padded IDs: ${config.zeroPaddedIds} digits`);
+			} else {
+				console.log("  Zero-Padded IDs: disabled");
+			}
 			console.log(`  Statuses: [${config.statuses.join(", ")}]`);
 			console.log("");
 
@@ -280,6 +396,12 @@ program
 			if (files.length > 0) {
 				await addAgentInstructions(cwd, core.gitOps, files, config.autoCommit);
 			}
+
+			// Install Claude agent if selected
+			if (claudeAgentPrompt.installClaudeAgent) {
+				await installClaudeAgent(cwd);
+				console.log("✓ Claude Code Backlog.md agent installed to .claude/agents/");
+			}
 		} catch (err) {
 			console.error("Failed to initialize project", err);
 			process.exitCode = 1;
@@ -287,13 +409,13 @@ program
 	});
 
 export async function generateNextDocId(core: Core): Promise<string> {
+	const config = await core.filesystem.loadConfig();
 	// Load local documents
 	const docs = await core.filesystem.listDocuments();
 	const allIds: string[] = [];
 
 	try {
-		const config = await core.filesystem.loadConfig();
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -343,17 +465,25 @@ export async function generateNextDocId(core: Core): Promise<string> {
 		}
 	}
 
-	return `doc-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `doc-${paddedId}`;
+	}
+
+	return `doc-${nextIdNumber}`;
 }
 
 export async function generateNextDecisionId(core: Core): Promise<string> {
+	const config = await core.filesystem.loadConfig();
 	// Load local decisions
 	const decisions = await core.filesystem.listDecisions();
 	const allIds: string[] = [];
 
 	try {
-		const config = await core.filesystem.loadConfig();
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -403,18 +533,37 @@ export async function generateNextDecisionId(core: Core): Promise<string> {
 		}
 	}
 
-	return `decision-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `decision-${paddedId}`;
+	}
+
+	return `decision-${nextIdNumber}`;
 }
 
 async function generateNextId(core: Core, parent?: string): Promise<string> {
+	// Ensure git operations have access to the config
+	await core.ensureConfigLoaded();
+
+	const config = await core.filesystem.loadConfig();
 	// Load local tasks and drafts in parallel
 	const [tasks, drafts] = await Promise.all([core.filesystem.listTasks(), core.filesystem.listDrafts()]);
-	const all = [...tasks, ...drafts];
+
 	const allIds: string[] = [];
 
+	// Add local task and draft IDs first
+	for (const t of tasks) {
+		allIds.push(t.id);
+	}
+	for (const d of drafts) {
+		allIds.push(d.id);
+	}
+
 	try {
-		const config = await core.filesystem.loadConfig();
-		const backlogDir = config?.backlogDirectory || "backlog";
+		const backlogDir = DEFAULT_DIRECTORIES.BACKLOG;
 
 		// Skip remote operations if disabled
 		if (config?.remoteOperations === false) {
@@ -427,15 +576,36 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 
 		const branches = await core.gitOps.listAllBranches();
 
-		// Load files from all branches in parallel
-		const branchFilePromises = branches.map(async (branch) => {
-			const files = await core.gitOps.listFilesInTree(branch, `${backlogDir}/tasks`);
-			return files
-				.map((file) => {
-					const match = file.match(/task-([\d.]+)/);
-					return match ? `task-${match[1]}` : null;
-				})
-				.filter((id): id is string => id !== null);
+		// Filter and normalize branch names - handle both local and remote branches
+		const normalizedBranches = branches
+			.flatMap((branch) => {
+				// For remote branches like "origin/feature", extract just "feature"
+				// But also try the full remote ref in case it's needed
+				if (branch.startsWith("origin/")) {
+					return [branch, branch.replace("origin/", "")];
+				}
+				return [branch];
+			})
+			// Remove duplicates and filter out HEAD
+			.filter((branch, index, arr) => arr.indexOf(branch) === index && branch !== "HEAD" && !branch.includes("HEAD"));
+
+		// Load files from all branches in parallel with better error handling
+		const branchFilePromises = normalizedBranches.map(async (branch) => {
+			try {
+				const files = await core.gitOps.listFilesInTree(branch, `${backlogDir}/tasks`);
+				return files
+					.map((file) => {
+						const match = file.match(/task-(\d+)/);
+						return match ? `task-${match[1]}` : null;
+					})
+					.filter((id): id is string => id !== null);
+			} catch (error) {
+				// Silently ignore errors for individual branches (they might not exist or be accessible)
+				if (process.env.DEBUG) {
+					console.log(`Could not access branch ${branch}:`, error);
+				}
+				return [];
+			}
 		});
 
 		const branchResults = await Promise.all(branchFilePromises);
@@ -452,13 +622,7 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 	if (parent) {
 		const prefix = parent.startsWith("task-") ? parent : `task-${parent}`;
 		let max = 0;
-		for (const t of tasks) {
-			if (t.id.startsWith(`${prefix}.`)) {
-				const rest = t.id.slice(prefix.length + 1);
-				const num = Number.parseInt(rest.split(".")[0] || "0", 10);
-				if (num > max) max = num;
-			}
-		}
+		// Iterate over allIds (which now includes both local and remote)
 		for (const id of allIds) {
 			if (id.startsWith(`${prefix}.`)) {
 				const rest = id.slice(prefix.length + 1);
@@ -466,17 +630,21 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 				if (num > max) max = num;
 			}
 		}
-		return `${prefix}.${max + 1}`;
+		const nextSubIdNumber = max + 1;
+		const padding = config?.zeroPaddedIds;
+
+		if (padding && typeof padding === "number" && padding > 0) {
+			// Pad sub-tasks to 2 digits. This supports up to 99 sub-tasks,
+			// which is a reasonable limit and keeps IDs from getting too long.
+			const paddedSubId = String(nextSubIdNumber).padStart(2, "0");
+			return `${prefix}.${paddedSubId}`;
+		}
+
+		return `${prefix}.${nextSubIdNumber}`;
 	}
 
 	let max = 0;
-	for (const t of all) {
-		const match = t.id.match(/^task-(\d+)/);
-		if (match) {
-			const num = Number.parseInt(match[1] || "0", 10);
-			if (num > max) max = num;
-		}
-	}
+	// Iterate over allIds (which now includes both local and remote)
 	for (const id of allIds) {
 		const match = id.match(/^task-(\d+)/);
 		if (match) {
@@ -484,7 +652,15 @@ async function generateNextId(core: Core, parent?: string): Promise<string> {
 			if (num > max) max = num;
 		}
 	}
-	return `task-${max + 1}`;
+	const nextIdNumber = max + 1;
+	const padding = config?.zeroPaddedIds;
+
+	if (padding && typeof padding === "number" && padding > 0) {
+		const paddedId = String(nextIdNumber).padStart(padding, "0");
+		return `task-${paddedId}`;
+	}
+
+	return `task-${nextIdNumber}`;
 }
 
 function normalizeDependencies(dependencies: unknown): string[] {
@@ -606,6 +782,7 @@ taskCmd
 	.action(async (title: string, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
 		const id = await generateNextId(core, options.parent);
 		const task = buildTaskFromOptions(id, title, options);
 
@@ -705,7 +882,8 @@ taskCmd
 			filtered = filtered.filter((t) => t.priority?.toLowerCase() === priorityLower);
 		}
 
-		// Apply sorting if specified
+		// Apply sorting - default to priority sorting
+		let sortedTasks = filtered;
 		if (options.sort) {
 			const validSortFields = ["priority", "id"];
 			const sortField = options.sort.toLowerCase();
@@ -714,8 +892,12 @@ taskCmd
 				process.exitCode = 1;
 				return;
 			}
-			filtered = sortTasks(filtered, sortField);
+			sortedTasks = sortTasks(filtered, sortField);
+		} else {
+			// Default to priority sorting
+			sortedTasks = sortTasks(filtered, "priority");
 		}
+		filtered = sortedTasks;
 
 		if (filtered.length === 0) {
 			if (options.parent) {
@@ -731,6 +913,18 @@ taskCmd
 		// Workaround for bun compile issue with commander options
 		const isPlainFlag = options.plain || process.argv.includes("--plain");
 		if (isPlainFlag) {
+			// If sorting by priority, do global sorting instead of status-grouped sorting
+			if (options.sort && options.sort.toLowerCase() === "priority") {
+				const sortedTasks = sortTasks(filtered, "priority");
+				console.log("Tasks (sorted by priority):");
+				for (const t of sortedTasks) {
+					const priorityIndicator = t.priority ? `[${t.priority.toUpperCase()}] ` : "";
+					const statusIndicator = t.status ? ` (${t.status})` : "";
+					console.log(`  ${priorityIndicator}${t.id} - ${t.title}${statusIndicator}`);
+				}
+				return;
+			}
+
 			const groups = new Map<string, Task[]>();
 			for (const task of filtered) {
 				const status = task.status || "";
@@ -748,8 +942,15 @@ taskCmd
 			for (const status of ordered) {
 				const list = groups.get(status);
 				if (!list) continue;
+
+				// Sort tasks within each status group if a sort field was specified
+				let sortedList = list;
+				if (options.sort) {
+					sortedList = sortTasks(list, options.sort.toLowerCase());
+				}
+
 				console.log(`${status || "No Status"}:`);
-				for (const t of list) {
+				for (const t of sortedList) {
 					const priorityIndicator = t.priority ? `[${t.priority.toUpperCase()}] ` : "";
 					console.log(`  ${priorityIndicator}${t.id} - ${t.title}`);
 				}
@@ -996,7 +1197,7 @@ taskCmd
 taskCmd
 	.argument("[taskId]")
 	.option("--plain", "use plain text output")
-	.action(async (taskId: string | undefined, options: any) => {
+	.action(async (taskId: string | undefined, options: { plain?: boolean }) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
 
@@ -1047,6 +1248,66 @@ taskCmd
 const draftCmd = program.command("draft");
 
 draftCmd
+	.command("list")
+	.description("list all drafts")
+	.option("--sort <field>", "sort drafts by field (priority, id)")
+	.option("--plain", "use plain text output")
+	.action(async (options: { plain?: boolean; sort?: string }) => {
+		const cwd = process.cwd();
+		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
+		const drafts = await core.filesystem.listDrafts();
+
+		if (!drafts || drafts.length === 0) {
+			console.log("No drafts found.");
+			return;
+		}
+
+		// Apply sorting - default to priority sorting like the web UI
+		const { sortTasks } = await import("./utils/task-sorting.ts");
+		let sortedDrafts = drafts;
+
+		if (options.sort) {
+			const validSortFields = ["priority", "id"];
+			const sortField = options.sort.toLowerCase();
+			if (!validSortFields.includes(sortField)) {
+				console.error(`Invalid sort field: ${options.sort}. Valid values are: priority, id`);
+				process.exitCode = 1;
+				return;
+			}
+			sortedDrafts = sortTasks(drafts, sortField);
+		} else {
+			// Default to priority sorting to match web UI behavior
+			sortedDrafts = sortTasks(drafts, "priority");
+		}
+
+		if (options.plain || process.argv.includes("--plain")) {
+			// Plain text output for AI agents
+			console.log("Drafts:");
+			for (const draft of sortedDrafts) {
+				const priorityIndicator = draft.priority ? `[${draft.priority.toUpperCase()}] ` : "";
+				console.log(`  ${priorityIndicator}${draft.id} - ${draft.title}`);
+			}
+		} else {
+			// Interactive UI - use unified view with draft support
+			const firstDraft = sortedDrafts[0];
+			if (!firstDraft) return;
+
+			const { runUnifiedView } = await import("./ui/unified-view.ts");
+			await runUnifiedView({
+				core,
+				initialView: "task-list",
+				selectedTask: firstDraft,
+				tasks: sortedDrafts,
+				filter: {
+					filterDescription: "All Drafts",
+				},
+				title: "Drafts",
+			});
+		}
+	});
+
+draftCmd
 	.command("create <title>")
 	.option("-d, --description <text>")
 	.option("--desc <text>", "alias for --description")
@@ -1056,6 +1317,7 @@ draftCmd
 	.action(async (title: string, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
+		await core.ensureConfigLoaded();
 		const id = await generateNextId(core);
 		const task = buildTaskFromOptions(id, title, options);
 		const filepath = await core.createDraft(task);
@@ -1069,7 +1331,7 @@ draftCmd
 	.action(async (taskId: string) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
-		const success = await core.archiveDraft(taskId, true);
+		const success = await core.archiveDraft(taskId);
 		if (success) {
 			console.log(`Archived draft ${taskId}`);
 		} else {
@@ -1254,8 +1516,9 @@ addBoardOptions(boardCmd.command("view").description("display tasks in a Kanban 
 boardCmd
 	.command("export [filename]")
 	.description("export kanban board to markdown file")
-	.option("-o, --output <path>", "output file (deprecated, use filename argument instead)")
 	.option("--force", "overwrite existing file without confirmation")
+	.option("--readme", "export to README.md with markers")
+	.option("--export-version <version>", "version to include in the export")
 	.action(async (filename, options) => {
 		const cwd = process.cwd();
 		const core = new Core(cwd);
@@ -1310,31 +1573,38 @@ boardCmd
 			// Close loading screen before export
 			loadingScreen?.close();
 
-			// Priority: filename argument > --output option > default Backlog.md
-			const outputFile = filename || options.output || "Backlog.md";
-			const outputPath = join(cwd, outputFile as string);
-
-			// Check if file exists and handle overwrite confirmation
-			const fileExists = await Bun.file(outputPath).exists();
-			if (fileExists && !options.force) {
-				const rl = createInterface({ input });
-				try {
-					const answer = await rl.question(`File "${outputPath}" already exists. Overwrite? (y/N): `);
-					if (!answer.toLowerCase().startsWith("y")) {
-						console.log("Export cancelled.");
-						return;
-					}
-				} finally {
-					rl.close();
-				}
-			}
-
 			// Get project name from config or use directory name
 			const { basename } = await import("node:path");
 			const projectName = config?.projectName || basename(cwd);
 
-			await exportKanbanBoardToFile(finalTasks, statuses, outputPath, projectName, options.force || !fileExists);
-			console.log(`Exported board to ${outputPath}`);
+			if (options.readme) {
+				// Use version from option if provided, otherwise use the CLI version
+				const exportVersion = options.exportVersion || version;
+				await updateReadmeWithBoard(finalTasks, statuses, projectName, exportVersion);
+				console.log("Updated README.md with Kanban board.");
+			} else {
+				// Use filename argument or default to Backlog.md
+				const outputFile = filename || "Backlog.md";
+				const outputPath = join(cwd, outputFile as string);
+
+				// Check if file exists and handle overwrite confirmation
+				const fileExists = await Bun.file(outputPath).exists();
+				if (fileExists && !options.force) {
+					const rl = createInterface({ input });
+					try {
+						const answer = await rl.question(`File "${outputPath}" already exists. Overwrite? (y/N): `);
+						if (!answer.toLowerCase().startsWith("y")) {
+							console.log("Export cancelled.");
+							return;
+						}
+					} finally {
+						rl.close();
+					}
+				}
+
+				await exportKanbanBoardToFile(finalTasks, statuses, outputPath, projectName, options.force || !fileExists);
+				console.log(`Exported board to ${outputPath}`);
+			}
 		} catch (error) {
 			loadingScreen?.close();
 			throw error;
@@ -1358,7 +1628,7 @@ docCmd
 			createdDate: new Date().toISOString().split("T")[0] || new Date().toISOString().slice(0, 10),
 			body: "",
 		};
-		await core.createDocument(document, true, options.path || "");
+		await core.createDocument(document, undefined, options.path || "");
 		console.log(`Created document ${id}`);
 	});
 
@@ -1439,7 +1709,7 @@ decisionCmd
 			decision: "",
 			consequences: "",
 		};
-		await core.createDecision(decision, true);
+		await core.createDecision(decision);
 		console.log(`Created decision ${id}`);
 	});
 
@@ -1553,9 +1823,6 @@ configCmd
 				case "maxColumnWidth":
 					console.log(config.maxColumnWidth?.toString() || "");
 					break;
-				case "backlogDirectory":
-					console.log(config.backlogDirectory || "");
-					break;
 				case "defaultPort":
 					console.log(config.defaultPort?.toString() || "");
 					break;
@@ -1568,10 +1835,13 @@ configCmd
 				case "autoCommit":
 					console.log(config.autoCommit?.toString() || "");
 					break;
+				case "zeroPaddedIds":
+					console.log(config.zeroPaddedIds?.toString() || "(disabled)");
+					break;
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, backlogDirectory, defaultPort, autoOpenBrowser, remoteOperations, autoCommit",
+						"Available keys: defaultEditor, projectName, defaultStatus, statuses, labels, milestones, dateFormat, maxColumnWidth, defaultPort, autoOpenBrowser, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1627,9 +1897,6 @@ configCmd
 					config.maxColumnWidth = width;
 					break;
 				}
-				case "backlogDirectory":
-					config.backlogDirectory = value;
-					break;
 				case "autoOpenBrowser": {
 					const boolValue = value.toLowerCase();
 					if (boolValue === "true" || boolValue === "1" || boolValue === "yes") {
@@ -1675,6 +1942,16 @@ configCmd
 					}
 					break;
 				}
+				case "zeroPaddedIds": {
+					const padding = Number.parseInt(value, 10);
+					if (Number.isNaN(padding) || padding < 0) {
+						console.error("zeroPaddedIds must be a non-negative number.");
+						process.exit(1);
+					}
+					// Set to undefined if 0 to remove it from config
+					config.zeroPaddedIds = padding > 0 ? padding : undefined;
+					break;
+				}
 				case "statuses":
 				case "labels":
 				case "milestones":
@@ -1685,7 +1962,7 @@ configCmd
 				default:
 					console.error(`Unknown config key: ${key}`);
 					console.error(
-						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, backlogDirectory, autoOpenBrowser, defaultPort, remoteOperations",
+						"Available keys: defaultEditor, projectName, defaultStatus, dateFormat, maxColumnWidth, autoOpenBrowser, defaultPort, remoteOperations, autoCommit, zeroPaddedIds",
 					);
 					process.exit(1);
 			}
@@ -1721,11 +1998,11 @@ configCmd
 			console.log(`  milestones: [${config.milestones.join(", ")}]`);
 			console.log(`  dateFormat: ${config.dateFormat}`);
 			console.log(`  maxColumnWidth: ${config.maxColumnWidth || "(not set)"}`);
-			console.log(`  backlogDirectory: ${config.backlogDirectory || "(not set)"}`);
 			console.log(`  autoOpenBrowser: ${config.autoOpenBrowser ?? "(not set)"}`);
 			console.log(`  defaultPort: ${config.defaultPort ?? "(not set)"}`);
 			console.log(`  remoteOperations: ${config.remoteOperations ?? "(not set)"}`);
 			console.log(`  autoCommit: ${config.autoCommit ?? "(not set)"}`);
+			console.log(`  zeroPaddedIds: ${config.zeroPaddedIds ?? "(disabled)"}`);
 		} catch (err) {
 			console.error("Failed to list config values", err);
 			process.exitCode = 1;

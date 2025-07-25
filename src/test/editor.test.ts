@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { platform } from "node:os";
 import { join } from "node:path";
 import type { BacklogConfig } from "../types/index.ts";
 import { isEditorAvailable, openInEditor, resolveEditor } from "../utils/editor.ts";
+import { createUniqueTestDir, safeCleanup } from "./test-utils.ts";
 
 describe("Editor utilities", () => {
 	let originalEditor: string | undefined;
@@ -91,37 +93,43 @@ describe("Editor utilities", () => {
 	});
 
 	describe("isEditorAvailable", () => {
-		it("should detect available editors", () => {
+		it("should detect available editors", async () => {
 			// Test with a command that should exist on the current platform
 			const testEditor = process.platform === "win32" ? "notepad" : "ls";
-			const available = isEditorAvailable(testEditor);
+			const available = await isEditorAvailable(testEditor);
 			// We can't guarantee any specific editor exists, so just verify the function works
 			expect(typeof available).toBe("boolean");
 		});
 
-		it("should return false for non-existent editors", () => {
-			const available = isEditorAvailable("definitely-not-a-real-editor-command");
+		it("should return false for non-existent editors", async () => {
+			const available = await isEditorAvailable("definitely-not-a-real-editor-command");
 			expect(available).toBe(false);
 		});
 
-		it("should handle editor commands with arguments", () => {
+		it("should handle editor commands with arguments", async () => {
 			const editor = process.platform === "win32" ? "notepad.exe" : "echo test";
-			const available = isEditorAvailable(editor);
+			const available = await isEditorAvailable(editor);
 			expect(available).toBe(true);
 		});
 	});
 
 	describe("openInEditor", () => {
-		const testDir = join(process.cwd(), "test-editor");
-		const testFile = join(testDir, "test.txt");
+		let TEST_DIR: string;
+		let testFile: string;
 
 		beforeEach(async () => {
-			await mkdir(testDir, { recursive: true });
+			TEST_DIR = createUniqueTestDir("test-editor");
+			testFile = join(TEST_DIR, "test.txt");
+			await mkdir(TEST_DIR, { recursive: true });
 			await writeFile(testFile, "Test content");
 		});
 
 		afterEach(async () => {
-			await rm(testDir, { recursive: true, force: true }).catch(() => {});
+			try {
+				await safeCleanup(TEST_DIR);
+			} catch {
+				// Ignore cleanup errors
+			}
 		});
 
 		it("should open file with echo command for testing", async () => {
@@ -151,6 +159,35 @@ describe("Editor utilities", () => {
 
 			const success = await openInEditor(testFile, config);
 			expect(success).toBe(false);
+		});
+
+		it("should wait for editor to complete before returning", async () => {
+			// Create a simple Node.js script that delays then exits
+			// This works cross-platform without needing shell/batch scripts
+			const scriptPath = join(TEST_DIR, "test-editor.js");
+			const scriptContent = `
+				setTimeout(() => {
+					process.exit(0);
+				}, 100);
+			`;
+			await Bun.write(scriptPath, scriptContent);
+
+			const config: BacklogConfig = {
+				projectName: "Test",
+				statuses: ["To Do", "Done"],
+				labels: [],
+				milestones: [],
+				dateFormat: "yyyy-mm-dd",
+				defaultEditor: `node ${scriptPath}`,
+			};
+
+			const startTime = Date.now();
+			const success = await openInEditor(testFile, config);
+			const endTime = Date.now();
+
+			expect(success).toBe(true);
+			// Should have waited at least 90ms (allowing some margin)
+			expect(endTime - startTime).toBeGreaterThanOrEqual(90);
 		});
 	});
 });

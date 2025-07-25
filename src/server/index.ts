@@ -1,4 +1,5 @@
 import type { Server } from "bun";
+import { $ } from "bun";
 import matter from "gray-matter";
 import { Core } from "../core/backlog.ts";
 import type { Task } from "../types/index.ts";
@@ -25,98 +26,127 @@ export class BacklogServer {
 		// Default to true if autoOpenBrowser is not explicitly set to false
 		const shouldOpenBrowser = openBrowser && (config?.autoOpenBrowser ?? true);
 
-		this.server = Bun.serve({
-			port: finalPort,
-			development: true,
-			routes: {
-				"/": indexHtml,
-				"/tasks": indexHtml,
-				"/drafts": indexHtml,
-				"/documentation": indexHtml,
-				"/documentation/*": indexHtml,
-				"/decisions": indexHtml,
-				"/decisions/*": indexHtml,
+		try {
+			this.server = Bun.serve({
+				port: finalPort,
+				development: process.env.NODE_ENV === "development",
+				routes: {
+					"/": indexHtml,
+					"/tasks": indexHtml,
+					"/drafts": indexHtml,
+					"/documentation": indexHtml,
+					"/documentation/*": indexHtml,
+					"/decisions": indexHtml,
+					"/decisions/*": indexHtml,
+					"/settings": indexHtml,
 
-				// API Routes using Bun's native route syntax
-				"/api/tasks": {
-					GET: async (req) => await this.handleListTasks(req),
-					POST: async (req) => await this.handleCreateTask(req),
+					// API Routes using Bun's native route syntax
+					"/api/tasks": {
+						GET: async (req) => await this.handleListTasks(req),
+						POST: async (req) => await this.handleCreateTask(req),
+					},
+					"/api/task/:id": {
+						GET: async (req) => await this.handleGetTask(req.params.id),
+					},
+					"/api/tasks/:id": {
+						GET: async (req) => await this.handleGetTask(req.params.id),
+						PUT: async (req) => await this.handleUpdateTask(req, req.params.id),
+						DELETE: async (req) => await this.handleDeleteTask(req.params.id),
+					},
+					"/api/statuses": {
+						GET: async () => await this.handleGetStatuses(),
+					},
+					"/api/config": {
+						GET: async () => await this.handleGetConfig(),
+						PUT: async (req) => await this.handleUpdateConfig(req),
+					},
+					"/api/docs": {
+						GET: async () => await this.handleListDocs(),
+						POST: async (req) => await this.handleCreateDoc(req),
+					},
+					"/api/doc/:id": {
+						GET: async (req) => await this.handleGetDoc(req.params.id),
+					},
+					"/api/docs/:id": {
+						GET: async (req) => await this.handleGetDoc(req.params.id),
+						PUT: async (req) => await this.handleUpdateDoc(req, req.params.id),
+					},
+					"/api/decisions": {
+						GET: async () => await this.handleListDecisions(),
+						POST: async (req) => await this.handleCreateDecision(req),
+					},
+					"/api/decision/:id": {
+						GET: async (req) => await this.handleGetDecision(req.params.id),
+					},
+					"/api/decisions/:id": {
+						GET: async (req) => await this.handleGetDecision(req.params.id),
+						PUT: async (req) => await this.handleUpdateDecision(req, req.params.id),
+					},
+					"/api/drafts": {
+						GET: async () => await this.handleListDrafts(),
+					},
+					"/api/drafts/:id/promote": {
+						POST: async (req) => await this.handlePromoteDraft(req.params.id),
+					},
 				},
-				"/api/task/:id": {
-					GET: async (req) => await this.handleGetTask(req.params.id),
+				fetch: async (req, server) => {
+					// Apply CORS headers to all responses
+					const response = await this.handleRequest(req, server);
+					if (response && req.url.includes("/api/")) {
+						response.headers.set("Access-Control-Allow-Origin", "*");
+						response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+						response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+					}
+					return response;
 				},
-				"/api/tasks/:id": {
-					GET: async (req) => await this.handleGetTask(req.params.id),
-					PUT: async (req) => await this.handleUpdateTask(req, req.params.id),
-					DELETE: async (req) => await this.handleDeleteTask(req.params.id),
+				error: this.handleError.bind(this),
+				websocket: {
+					open(ws) {
+						// Client connected
+					},
+					message(ws, message) {
+						// Echo back for health check
+						ws.send("pong");
+					},
+					close(ws) {
+						// Client disconnected
+					},
 				},
-				"/api/statuses": {
-					GET: async () => await this.handleGetStatuses(),
-				},
-				"/api/config": {
-					GET: () => Response.json({ projectName: this.projectName }),
-				},
-				"/api/health": {
-					GET: async () => await this.handleHealthCheck(),
-				},
-				"/api/docs": {
-					GET: async () => await this.handleListDocs(),
-					POST: async (req) => await this.handleCreateDoc(req),
-				},
-				"/api/doc/:id": {
-					GET: async (req) => await this.handleGetDoc(req.params.id),
-				},
-				"/api/docs/:id": {
-					GET: async (req) => await this.handleGetDoc(req.params.id),
-					PUT: async (req) => await this.handleUpdateDoc(req, req.params.id),
-				},
-				"/api/decisions": {
-					GET: async () => await this.handleListDecisions(),
-					POST: async (req) => await this.handleCreateDecision(req),
-				},
-				"/api/decision/:id": {
-					GET: async (req) => await this.handleGetDecision(req.params.id),
-				},
-				"/api/decisions/:id": {
-					GET: async (req) => await this.handleGetDecision(req.params.id),
-					PUT: async (req) => await this.handleUpdateDecision(req, req.params.id),
-				},
-			},
-			fetch: async (req, server) => {
-				// Apply CORS headers to all responses
-				const response = await this.handleRequest(req, server);
-				if (response && req.url.includes("/api/")) {
-					response.headers.set("Access-Control-Allow-Origin", "*");
-					response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-					response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+			});
+
+			const url = `http://localhost:${finalPort}`;
+			console.log(`🚀 Backlog.md browser interface running at ${url}`);
+			console.log(`📊 Project: ${this.projectName}`);
+			const stopKey = process.platform === "darwin" ? "Cmd+C" : "Ctrl+C";
+			console.log(`⏹️  Press ${stopKey} to stop the server`);
+
+			if (shouldOpenBrowser) {
+				console.log("🌐 Opening browser...");
+				await this.openBrowser(url);
+			} else {
+				console.log("💡 Open your browser and navigate to the URL above");
+			}
+		} catch (error) {
+			// Handle port already in use error
+			const errorCode = (error as any)?.code;
+			const errorMessage = (error as Error)?.message;
+			if (errorCode === "EADDRINUSE" || errorMessage?.includes("address already in use")) {
+				console.error(`\n❌ Error: Port ${finalPort} is already in use.\n`);
+				console.log("💡 Suggestions:");
+				console.log(`   1. Try a different port: backlog browser --port ${finalPort + 1}`);
+				console.log(`   2. Find what's using port ${finalPort}:`);
+				if (process.platform === "darwin" || process.platform === "linux") {
+					console.log(`      Run: lsof -i :${finalPort}`);
+				} else if (process.platform === "win32") {
+					console.log(`      Run: netstat -ano | findstr :${finalPort}`);
 				}
-				return response;
-			},
-			error: this.handleError.bind(this),
-			websocket: {
-				open(_ws) {
-					// Silent - no need to log normal connections
-				},
-				message(_ws, _message) {
-					// No need to handle messages for simple connection monitoring
-				},
-				close(_ws) {
-					// Silent - no need to log normal disconnections
-				},
-			},
-		});
+				console.log("   3. Or kill the process using the port and try again\n");
+				process.exit(1);
+			}
 
-		const url = `http://localhost:${finalPort}`;
-		console.log(`🚀 Backlog.md browser interface running at ${url}`);
-		console.log(`📊 Project: ${this.projectName}`);
-		const stopKey = process.platform === "darwin" ? "Cmd+C" : "Ctrl+C";
-		console.log(`⏹️  Press ${stopKey} to stop the server`);
-
-		if (shouldOpenBrowser) {
-			console.log("🌐 Opening browser...");
-			await this.openBrowser(url);
-		} else {
-			console.log("💡 Open your browser and navigate to the URL above");
+			// Handle other errors
+			console.error("❌ Failed to start server:", errorMessage || error);
+			process.exit(1);
 		}
 	}
 
@@ -145,9 +175,7 @@ export class BacklogServer {
 					break;
 			}
 
-			await Bun.spawn(cmd, {
-				stdio: ["ignore", "ignore", "ignore"],
-			});
+			await $`${cmd}`.quiet();
 		} catch (error) {
 			console.warn("⚠️  Failed to open browser automatically:", error);
 			console.log("💡 Please open your browser manually and navigate to the URL above");
@@ -163,7 +191,7 @@ export class BacklogServer {
 		if (req.headers.get("upgrade") === "websocket") {
 			const success = server.upgrade(req);
 			if (success) {
-				return new Response(null, { status: 101 }); // WebSocket upgrade successful
+				return new Response(null, { status: 101 }); // WebSocket upgrade response
 			}
 			return new Response("WebSocket upgrade failed", { status: 400 });
 		}
@@ -200,8 +228,8 @@ export class BacklogServer {
 			pathname.endsWith(".tsx")
 		) {
 			// Handle specific static files
-			if (pathname === "/styles/globals.css") {
-				const cssFile = Bun.file("src/web/styles/globals.css");
+			if (pathname === "/styles/style.css") {
+				const cssFile = Bun.file("src/web/styles/style.css");
 				if (await cssFile.exists()) {
 					return new Response(await cssFile.text(), {
 						headers: { "Content-Type": "text/css" },
@@ -219,7 +247,7 @@ export class BacklogServer {
 				});
 
 				if (build.success && build.outputs.length > 0) {
-					return new Response(await build.outputs[0].text(), {
+					return new Response(await build.outputs[0]!.text(), {
 						headers: { "Content-Type": "application/javascript" },
 					});
 				}
@@ -240,7 +268,7 @@ export class BacklogServer {
 			return new Response("Not Found", { status: 404 });
 		}
 
-		// For all other routes, return 404
+		// For all other routes, return 404 since routes should handle all valid paths
 		return new Response("Not Found", { status: 404 });
 	}
 
@@ -289,7 +317,12 @@ export class BacklogServer {
 			...(taskData.priority && { priority: taskData.priority }),
 		};
 
-		await this.core.createTask(task, await this.shouldAutoCommit());
+		// Check if this should be a draft based on status
+		if (task.status && task.status.toLowerCase() === "draft") {
+			await this.core.createDraft(task, await this.shouldAutoCommit());
+		} else {
+			await this.core.createTask(task, await this.shouldAutoCommit());
+		}
 		return Response.json(task, { status: 201 });
 	}
 
@@ -485,6 +518,47 @@ export class BacklogServer {
 		}
 	}
 
+	private async handleGetConfig(): Promise<Response> {
+		try {
+			const config = await this.core.filesystem.loadConfig();
+			if (!config) {
+				return Response.json({ error: "Configuration not found" }, { status: 404 });
+			}
+			return Response.json(config);
+		} catch (error) {
+			console.error("Error loading config:", error);
+			return Response.json({ error: "Failed to load configuration" }, { status: 500 });
+		}
+	}
+
+	private async handleUpdateConfig(req: Request): Promise<Response> {
+		try {
+			const updatedConfig = await req.json();
+
+			// Validate configuration
+			if (!updatedConfig.projectName?.trim()) {
+				return Response.json({ error: "Project name is required" }, { status: 400 });
+			}
+
+			if (updatedConfig.defaultPort && (updatedConfig.defaultPort < 1 || updatedConfig.defaultPort > 65535)) {
+				return Response.json({ error: "Port must be between 1 and 65535" }, { status: 400 });
+			}
+
+			// Save configuration
+			await this.core.filesystem.saveConfig(updatedConfig);
+
+			// Update local project name if changed
+			if (updatedConfig.projectName !== this.projectName) {
+				this.projectName = updatedConfig.projectName;
+			}
+
+			return Response.json(updatedConfig);
+		} catch (error) {
+			console.error("Error updating config:", error);
+			return Response.json({ error: "Failed to update configuration" }, { status: 500 });
+		}
+	}
+
 	private async generateNextId(): Promise<string> {
 		const tasks = await this.core.filesystem.listTasks();
 		const drafts = await this.core.filesystem.listDrafts();
@@ -515,64 +589,35 @@ export class BacklogServer {
 	private extractSection(content: string, sectionName: string): string | undefined {
 		const regex = new RegExp(`## ${sectionName}\\s*([\\s\\S]*?)(?=## |$)`, "i");
 		const match = content.match(regex);
-		return match ? match[1].trim() : undefined;
-	}
-
-	private async handleHealthCheck(): Promise<Response> {
-		const startTime = performance.now();
-
-		try {
-			// Check filesystem
-			const config = await this.core.filesystem.loadConfig();
-
-			const responseTime = Math.round(performance.now() - startTime);
-
-			const healthData = {
-				status: "healthy",
-				timestamp: new Date().toISOString(),
-				responseTime,
-				project: this.projectName,
-				checks: {
-					filesystem: "ok",
-					config: config ? "ok" : "warning",
-				},
-			};
-
-			return Response.json(healthData, {
-				headers: {
-					"Access-Control-Allow-Origin": "*",
-					"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-					"Access-Control-Allow-Headers": "Content-Type",
-				},
-			});
-		} catch (error) {
-			const responseTime = Math.round(performance.now() - startTime);
-
-			const healthData = {
-				status: "unhealthy",
-				timestamp: new Date().toISOString(),
-				responseTime,
-				project: this.projectName,
-				checks: {
-					filesystem: "error",
-					config: "error",
-				},
-				error: error instanceof Error ? error.message : "Unknown error",
-			};
-
-			return Response.json(healthData, {
-				status: 503,
-				headers: {
-					"Access-Control-Allow-Origin": "*",
-					"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-					"Access-Control-Allow-Headers": "Content-Type",
-				},
-			});
-		}
+		return match ? match[1]!.trim() : undefined;
 	}
 
 	private handleError(error: Error): Response {
 		console.error("Server Error:", error);
 		return new Response("Internal Server Error", { status: 500 });
+	}
+
+	// Draft handlers
+	private async handleListDrafts(): Promise<Response> {
+		try {
+			const drafts = await this.core.filesystem.listDrafts();
+			return Response.json(drafts);
+		} catch (error) {
+			console.error("Error listing drafts:", error);
+			return Response.json([]);
+		}
+	}
+
+	private async handlePromoteDraft(draftId: string): Promise<Response> {
+		try {
+			const success = await this.core.promoteDraft(draftId);
+			if (!success) {
+				return Response.json({ error: "Draft not found" }, { status: 404 });
+			}
+			return Response.json({ success: true });
+		} catch (error) {
+			console.error("Error promoting draft:", error);
+			return Response.json({ error: "Failed to promote draft" }, { status: 500 });
+		}
 	}
 }

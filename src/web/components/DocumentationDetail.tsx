@@ -6,6 +6,7 @@ import {type Document} from '../../types';
 import ErrorBoundary from '../components/ErrorBoundary';
 import {SuccessToast} from './SuccessToast';
 import { useTheme } from '../contexts/ThemeContext';
+import { sanitizeUrlTitle } from '../utils/urlHelpers';
 
 // Custom MDEditor wrapper for proper height handling
 const MarkdownEditor = memo(function MarkdownEditor({
@@ -23,7 +24,7 @@ const MarkdownEditor = memo(function MarkdownEditor({
         // Preview mode - just show the rendered markdown without editor UI
         return (
             <div
-                className="prose prose-sm max-w-none w-full p-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                className="prose prose-sm !max-w-none w-full p-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
                 data-color-mode={theme}>
                 <MDEditor.Markdown source={value}/>
             </div>
@@ -32,22 +33,24 @@ const MarkdownEditor = memo(function MarkdownEditor({
 
     // Edit mode - show full editor that fills the available space
     return (
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 w-full flex flex-col" style={{ minHeight: '500px', height: '70vh' }}>
-            <MDEditor
-                value={value}
-                onChange={onChange}
-                preview="edit"
-                height="100%"
-                hideToolbar={false}
-                data-color-mode={theme}
-                textareaProps={{
-                    placeholder: 'Write your documentation here...',
-                    style: {
-                        fontSize: '14px',
-                        resize: 'none'
-                    }
-                }}
-            />
+        <div className="h-full w-full flex flex-col">
+            <div className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+                <MDEditor
+                    value={value}
+                    onChange={onChange}
+                    preview="edit"
+                    height="100%"
+                    hideToolbar={false}
+                    data-color-mode={theme}
+                    textareaProps={{
+                        placeholder: 'Write your documentation here...',
+                        style: {
+                            fontSize: '14px',
+                            resize: 'none'
+                        }
+                    }}
+                />
+            </div>
         </div>
     );
 });
@@ -89,7 +92,7 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
             setOriginalDocTitle('');
             setContent('');
             setOriginalContent('');
-        } else if (id && docs.length > 0) {
+        } else if (id) {
             setIsNewDocument(false);
             setIsEditing(false); // Ensure we start in preview mode for existing documents
             loadDocContent();
@@ -117,9 +120,10 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
             // Find document from props
             const prefixedId = addDocPrefix(id);
             const doc = docs.find(d => d.id === prefixedId);
-            if (doc) {
-                setDocument(doc);
-                // Fetch full document data
+            
+            // Always try to fetch the document from API, whether we found it in docs or not
+            // This ensures deep linking works even before the parent component loads the docs array
+            try {
                 const fullDoc = await apiClient.fetchDoc(prefixedId);
                 setContent(fullDoc.body || '');
                 setOriginalContent(fullDoc.body || '');
@@ -127,8 +131,17 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
                 setOriginalDocTitle(fullDoc.title || '');
                 // Update document state with full data
                 setDocument(fullDoc);
-            } else {
-                setError(new Error(`Document with ID "${prefixedId}" not found`));
+            } catch (fetchError) {
+                // If fetch fails and we don't have the doc in props, show error
+                if (!doc) {
+                    setError(new Error(`Document with ID "${prefixedId}" not found`));
+                    console.error('Failed to load document:', fetchError);
+                } else {
+                    // We have basic info from props even if fetch failed
+                    setDocument(doc);
+                    setDocTitle(doc.title || '');
+                    setOriginalDocTitle(doc.title || '');
+                }
             }
         } catch (err) {
             const error = err instanceof Error ? err : new Error('Failed to load document');
@@ -162,7 +175,7 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
                 setIsNewDocument(false);
                 // Use the returned document ID for navigation
                 const documentId = result.id.replace('doc-', ''); // Remove prefix for URL
-                navigate(`/documentation/${documentId}/${encodeURIComponent(docTitle)}`);
+                navigate(`/documentation/${documentId}/${sanitizeUrlTitle(docTitle)}`);
             } else {
                 // Update existing document
                 if (!id) return;
@@ -174,7 +187,7 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
                 setTimeout(() => setShowSaveSuccess(false), 4000);
                 // Exit edit mode and navigate to document detail page (this will load in preview mode)
                 setIsEditing(false);
-                navigate(`/documentation/${id}/${encodeURIComponent(docTitle)}`);
+                navigate(`/documentation/${id}/${sanitizeUrlTitle(docTitle)}`);
             }
         } catch (err) {
             const error = err instanceof Error ? err : new Error('Failed to save document');
@@ -321,8 +334,8 @@ export default function DocumentationDetail({docs, onRefreshData}: Documentation
                 </div>
 
                 {/* Content Section */}
-                <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-800 transition-colors duration-200">
-                    <div className="py-8 px-8">
+                <div className="flex-1 bg-gray-50 dark:bg-gray-800 transition-colors duration-200 flex flex-col">
+                    <div className="flex-1 p-8 flex flex-col min-h-0">
                         <MarkdownEditor
                             value={content}
                             onChange={(val) => setContent(val || '')}

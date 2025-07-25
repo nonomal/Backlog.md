@@ -1,12 +1,14 @@
+export * from "./readme.ts";
 // Types
 
 export {
 	_loadAgentGuideline,
 	type AgentInstructionFile,
 	addAgentInstructions,
+	installClaudeAgent,
 } from "./agent-instructions.ts";
 // Kanban board utilities
-export { exportKanbanBoardToFile, generateKanbanBoard } from "./board.ts";
+export { exportKanbanBoardToFile, generateKanbanBoardWithMetadata } from "./board.ts";
 // Constants
 export * from "./constants/index.ts";
 // Core entry point
